@@ -150,6 +150,7 @@ fn main() -> Result<()> {
         CURRENT_INSTANCE.with(|current| current.replace(Some(component.clone_strong())));
     }
 
+    std::process::exit(0);
     component.run()?;
 
     if let Some(data_path) = args.save_data {
