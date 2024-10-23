@@ -13,7 +13,7 @@ Some convention used in the generated code:
 */
 
 use crate::expression_tree::{BuiltinFunction, EasingCurve, MinMaxOp, OperatorClass};
-use crate::langtype::{Enumeration, EnumerationValue, Type};
+use crate::langtype::{Enumeration, EnumerationValue, Struct, Type};
 use crate::layout::Orientation;
 use crate::llr::{
     self, EvaluationContext as llr_EvaluationContext, Expression, ParentCtx as llr_ParentCtx,
@@ -92,12 +92,16 @@ fn rust_primitive_type(ty: &Type) -> Option<proc_macro2::TokenStream> {
         Type::Percent => Some(quote!(f32)),
         Type::Bool => Some(quote!(bool)),
         Type::Image => Some(quote!(sp::Image)),
-        Type::Struct { fields, name: None, .. } => {
-            let elem = fields.values().map(rust_primitive_type).collect::<Option<Vec<_>>>()?;
-            // This will produce a tuple
-            Some(quote!((#(#elem,)*)))
+        Type::Struct(s) => {
+            if let Some(name) = &s.name {
+                Some(struct_name_to_tokens(name))
+            } else {
+                let elem =
+                    s.fields.values().map(rust_primitive_type).collect::<Option<Vec<_>>>()?;
+                // This will produce a tuple
+                Some(quote!((#(#elem,)*)))
+            }
         }
-        Type::Struct { name: Some(name), .. } => Some(struct_name_to_tokens(name)),
         Type::Array(o) => {
             let inner = rust_primitive_type(o)?;
             Some(quote!(sp::ModelRc<#inner>))
@@ -154,9 +158,12 @@ pub fn generate(doc: &Document, compiler_config: &CompilerConfiguration) -> Toke
         .structs_and_enums
         .iter()
         .filter_map(|ty| match ty {
-            Type::Struct { fields, name: Some(name), node: Some(_), rust_attributes } => {
-                Some((ident(name), generate_struct(name, fields, rust_attributes)))
-            }
+            Type::Struct(s) => match s.as_ref() {
+                Struct { fields, name: Some(name), node: Some(_), rust_attributes } => {
+                    Some((ident(name), generate_struct(name, fields, rust_attributes)))
+                }
+                _ => None,
+            },
             Type::Enumeration(en) => Some((ident(&en.name), generate_enum(en))),
             _ => None,
         })
