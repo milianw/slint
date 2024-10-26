@@ -763,35 +763,46 @@ impl Snapshotter {
                     .collect(),
             },
             Expression::PathData(path) => Expression::PathData(match path {
-                expression_tree::Path::Elements(path_elements) => expression_tree::Path::Elements(
-                    path_elements
-                        .iter()
-                        .map(|p| {
-                            expression_tree::PathElement {
-                                element_type: p.element_type.clone(), // builtin should be OK to clone
-                                bindings: p
-                                    .bindings
-                                    .iter()
-                                    .map(|(k, v)| {
-                                        (
-                                            k.clone(),
-                                            RefCell::new(
-                                                self.snapshot_binding_expression(&v.borrow()),
-                                            ),
-                                        )
-                                    })
-                                    .collect(),
-                            }
-                        })
-                        .collect(),
-                ),
-                expression_tree::Path::Events(ex1, ex2) => expression_tree::Path::Events(
-                    ex1.iter().map(|e| self.snapshot_expression(e)).collect(),
-                    ex2.iter().map(|e| self.snapshot_expression(e)).collect(),
-                ),
-                expression_tree::Path::Commands(ex) => {
-                    expression_tree::Path::Commands(Box::new(self.snapshot_expression(ex)))
+                expression_tree::Path::Elements(path_elements) => {
+                    expression_tree::Path::Elements(Rc::new(RefCell::new(
+                        path_elements
+                            .borrow()
+                            .iter()
+                            .map(|p| {
+                                expression_tree::PathElement {
+                                    element_type: p.element_type.clone(), // builtin should be OK to clone
+                                    bindings: p
+                                        .bindings
+                                        .iter()
+                                        .map(|(k, v)| {
+                                            (
+                                                k.clone(),
+                                                RefCell::new(
+                                                    self.snapshot_binding_expression(&v.borrow()),
+                                                ),
+                                            )
+                                        })
+                                        .collect(),
+                                }
+                            })
+                            .collect(),
+                    )))
                 }
+                expression_tree::Path::Events(events) => {
+                    let expression_tree::PathEvents { events, coordinates } = &*events.borrow();
+                    expression_tree::Path::Events(Rc::new(RefCell::new(
+                        expression_tree::PathEvents {
+                            events: events.iter().map(|e| self.snapshot_expression(e)).collect(),
+                            coordinates: coordinates
+                                .iter()
+                                .map(|e| self.snapshot_expression(e))
+                                .collect(),
+                        },
+                    )))
+                }
+                expression_tree::Path::Commands(ex) => expression_tree::Path::Commands(Rc::new(
+                    RefCell::new(self.snapshot_expression(&*ex.borrow())),
+                )),
             }),
             Expression::LinearGradient { angle, stops } => Expression::LinearGradient {
                 angle: Box::new(self.snapshot_expression(angle)),

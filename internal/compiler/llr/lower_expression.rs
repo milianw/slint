@@ -910,6 +910,7 @@ fn compile_path(path: &crate::expression_tree::Path, ctx: &ExpressionContext) ->
     match path {
         crate::expression_tree::Path::Elements(elements) => {
             let converted_elements = elements
+                .borrow()
                 .iter()
                 .map(|element| {
                     let element_type = Type::Struct(Rc::new(Struct {
@@ -950,8 +951,9 @@ fn compile_path(path: &crate::expression_tree::Path, ctx: &ExpressionContext) ->
                 .collect();
             llr_path_elements(converted_elements)
         }
-        crate::expression_tree::Path::Events(events, points) => {
-            if events.is_empty() || points.is_empty() {
+        crate::expression_tree::Path::Events(events) => {
+            let crate::expression_tree::PathEvents { events, coordinates } = &*events.borrow();
+            if events.is_empty() || coordinates.is_empty() {
                 return llr_path_elements(vec![]);
             }
 
@@ -959,7 +961,8 @@ fn compile_path(path: &crate::expression_tree::Path, ctx: &ExpressionContext) ->
 
             let event_type = events.first().unwrap().ty(ctx);
 
-            let points: Vec<_> = points.iter().map(|point| lower_expression(point, ctx)).collect();
+            let points: Vec<_> =
+                coordinates.iter().map(|point| lower_expression(point, ctx)).collect();
 
             let point_type = points.first().unwrap().ty(ctx);
 
@@ -1000,7 +1003,7 @@ fn compile_path(path: &crate::expression_tree::Path, ctx: &ExpressionContext) ->
             }
         }
         crate::expression_tree::Path::Commands(commands) => llr_Expression::Cast {
-            from: lower_expression(commands, ctx).into(),
+            from: lower_expression(&*commands.borrow(), ctx).into(),
             to: Type::PathData,
         },
     }

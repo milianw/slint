@@ -11,7 +11,7 @@ use corelib::rtti::AnimatedBindingKind;
 use corelib::{Brush, Color, PathData, SharedString, SharedVector};
 use i_slint_compiler::expression_tree::{
     BuiltinFunction, EasingCurve, Expression, MinMaxOp, Path as ExprPath,
-    PathElement as ExprPathElement,
+    PathElement as ExprPathElement, PathEvents as ExprPathEvents,
 };
 use i_slint_compiler::langtype::Type;
 use i_slint_compiler::object_tree::ElementRc;
@@ -1732,15 +1732,17 @@ pub fn convert_path(path: &ExprPath, local_context: &mut EvalLocalContext) -> Pa
     match path {
         ExprPath::Elements(elements) => PathData::Elements(
             elements
+                .borrow()
                 .iter()
                 .map(|element| convert_path_element(element, local_context))
                 .collect::<SharedVector<PathElement>>(),
         ),
-        ExprPath::Events(events, points) => {
-            convert_from_lyon_path(events.iter(), points.iter(), local_context)
+        ExprPath::Events(events) => {
+            let ExprPathEvents { events, coordinates } = &*events.borrow();
+            convert_from_lyon_path(events.iter(), coordinates.iter(), local_context)
         }
         ExprPath::Commands(commands) => {
-            if let Value::String(commands) = eval_expression(commands, local_context) {
+            if let Value::String(commands) = eval_expression(&*commands.borrow(), local_context) {
                 PathData::Commands(commands)
             } else {
                 panic!("binding to path commands does not evaluate to string");

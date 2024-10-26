@@ -77,10 +77,12 @@ pub fn compile_paths(
                         }
                     }
                 }
-                expr if expr.ty() == Type::String => Expression::PathData(
-                    crate::expression_tree::Path::Commands(Box::new(commands_expr.expression)),
-                )
-                .into(),
+                expr if expr.ty() == Type::String => {
+                    Expression::PathData(crate::expression_tree::Path::Commands(Rc::new(
+                        RefCell::new(commands_expr.expression),
+                    )))
+                    .into()
+                }
                 _ => {
                     diag.push_error(
                         "The commands property only accepts strings".into(),
@@ -132,7 +134,10 @@ pub fn compile_paths(
                     elem.children.push(child);
                 }
             }
-            Expression::PathData(crate::expression_tree::Path::Elements(path_data)).into()
+            Expression::PathData(crate::expression_tree::Path::Elements(Rc::new(RefCell::new(
+                path_data,
+            ))))
+            .into()
         };
 
         elem_.borrow_mut().bindings.insert("elements".into(), RefCell::new(path_data_binding));
@@ -215,5 +220,9 @@ fn compile_path_from_string_literal(
         })
         .collect();
 
-    Ok(Expression::PathData(Path::Events(events, points)).into())
+    Ok(Expression::PathData(Path::Events(Rc::new(RefCell::new(PathEvents {
+        events,
+        coordinates: points,
+    }))))
+    .into())
 }

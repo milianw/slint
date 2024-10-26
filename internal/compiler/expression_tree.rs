@@ -864,14 +864,15 @@ impl Expression {
             }
             Expression::PathData(data) => match data {
                 Path::Elements(elements) => {
-                    for element in elements {
+                    for element in &*elements.borrow() {
                         element.bindings.values().for_each(|binding| visitor(&binding.borrow()))
                     }
                 }
-                Path::Events(events, coordinates) => {
+                Path::Events(events) => {
+                    let PathEvents { events, coordinates } = &*events.borrow();
                     events.iter().chain(coordinates.iter()).for_each(visitor);
                 }
-                Path::Commands(commands) => visitor(commands),
+                Path::Commands(commands) => visitor(&commands.borrow()),
             },
             Expression::StoreLocalVariable { value, .. } => visitor(value),
             Expression::ReadLocalVariable { .. } => {}
@@ -966,17 +967,18 @@ impl Expression {
             }
             Expression::PathData(data) => match data {
                 Path::Elements(elements) => {
-                    for element in elements {
+                    for element in &mut *elements.borrow_mut() {
                         element
                             .bindings
                             .values_mut()
                             .for_each(|binding| visitor(&mut binding.borrow_mut()))
                     }
                 }
-                Path::Events(events, coordinates) => {
+                Path::Events(events) => {
+                    let PathEvents { events, coordinates } = &mut *events.borrow_mut();
                     events.iter_mut().chain(coordinates.iter_mut()).for_each(visitor);
                 }
-                Path::Commands(commands) => visitor(commands),
+                Path::Commands(commands) => visitor(&mut *commands.borrow_mut()),
             },
             Expression::StoreLocalVariable { value, .. } => visitor(value),
             Expression::ReadLocalVariable { .. } => {}
@@ -1062,9 +1064,10 @@ impl Expression {
             Expression::Struct { values, .. } => values.iter().all(|(_, v)| v.is_constant()),
             Expression::PathData(data) => match data {
                 Path::Elements(elements) => elements
+                    .borrow()
                     .iter()
                     .all(|element| element.bindings.values().all(|v| v.borrow().is_constant())),
-                Path::Events(_, _) => true,
+                Path::Events(_) => true,
                 Path::Commands(_) => false,
             },
             Expression::StoreLocalVariable { .. } => false,
@@ -1299,7 +1302,7 @@ impl Expression {
             },
             Type::Bool => Expression::BoolLiteral(false),
             Type::Model => Expression::Invalid,
-            Type::PathData => Expression::PathData(Path::Elements(vec![])),
+            Type::PathData => Expression::PathData(Path::Elements(Rc::new(RefCell::new(vec![])))),
             Type::Array(element_ty) => {
                 Expression::Array { element_ty: (**element_ty).clone(), values: vec![] }
             }
@@ -1524,9 +1527,15 @@ pub struct BindingAnalysis {
 
 #[derive(Debug, Clone)]
 pub enum Path {
-    Elements(Vec<PathElement>),
-    Events(Vec<Expression>, Vec<Expression>),
-    Commands(Box<Expression>), // expr must evaluate to string
+    Elements(Rc<RefCell<Vec<PathElement>>>),
+    Events(Rc<RefCell<PathEvents>>),
+    Commands(Rc<RefCell<Expression>>), // expr must evaluate to string
+}
+
+#[derive(Debug, Clone)]
+pub struct PathEvents {
+    pub events: Vec<Expression>,
+    pub coordinates: Vec<Expression>,
 }
 
 #[derive(Debug, Clone)]
