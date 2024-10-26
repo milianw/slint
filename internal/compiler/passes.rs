@@ -52,9 +52,11 @@ mod unique_id;
 mod visible;
 mod z_order;
 
-use crate::expression_tree::Expression;
+use crate::expression_tree::{BinaryExpression, Expression};
 use crate::namedreference::NamedReference;
 use smol_str::SmolStr;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub async fn run_passes(
     doc: &mut crate::object_tree::Document,
@@ -157,19 +159,20 @@ pub async fn run_passes(
             crate::typeregister::RESERVED_ROTATION_PROPERTIES[1..]
                 .iter()
                 .map(|(prop_name, _)| *prop_name),
-            Some(&|e, prop| Expression::BinaryExpression {
-                lhs: Expression::PropertyReference(NamedReference::new(
-                    e,
-                    match prop {
-                        "rotation-origin-x" => SmolStr::new_static("width"),
-                        "rotation-origin-y" => SmolStr::new_static("height"),
-                        "rotation-angle" => return Expression::Invalid,
-                        _ => unreachable!(),
-                    },
-                ))
-                .into(),
-                op: '/',
-                rhs: Expression::NumberLiteral(2., Default::default()).into(),
+            Some(&|e, prop| {
+                Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                    lhs: Expression::PropertyReference(NamedReference::new(
+                        e,
+                        match prop {
+                            "rotation-origin-x" => SmolStr::new_static("width"),
+                            "rotation-origin-y" => SmolStr::new_static("height"),
+                            "rotation-angle" => return Expression::Invalid,
+                            _ => unreachable!(),
+                        },
+                    )),
+                    op: '/',
+                    rhs: Expression::NumberLiteral(2., Default::default()),
+                })))
             }),
             &SmolStr::new_static("Rotate"),
             &global_type_registry.borrow(),

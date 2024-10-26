@@ -602,12 +602,7 @@ pub enum Expression {
         node: Option<NodeOrToken>,
     },
 
-    BinaryExpression {
-        lhs: Box<Expression>,
-        rhs: Box<Expression>,
-        /// '+', '-', '/', '*', '=', '!', '<', '>', '≤', '≥', '&', '|'
-        op: char,
-    },
+    BinaryExpression(Rc<RefCell<BinaryExpression>>),
 
     UnaryOp {
         sub: Box<Expression>,
@@ -731,7 +726,8 @@ impl Expression {
                     Type::Void
                 }
             }
-            Expression::BinaryExpression { op, lhs, rhs } => {
+            Expression::BinaryExpression(exp) => {
+                let BinaryExpression { lhs, rhs, op } = &*exp.borrow();
                 if operator_class(*op) != OperatorClass::ArithmeticOp {
                     Type::Bool
                 } else if *op == '+' || *op == '-' {
@@ -847,7 +843,8 @@ impl Expression {
                 visitor(true_expr);
                 visitor(false_expr);
             }
-            Expression::BinaryExpression { lhs, rhs, .. } => {
+            Expression::BinaryExpression(exp) => {
+                let BinaryExpression { lhs, rhs, op: _ } = &*exp.borrow();
                 visitor(lhs);
                 visitor(rhs);
             }
@@ -950,7 +947,8 @@ impl Expression {
                 visitor(true_expr);
                 visitor(false_expr);
             }
-            Expression::BinaryExpression { lhs, rhs, .. } => {
+            Expression::BinaryExpression(exp) => {
+                let BinaryExpression { lhs, rhs, op: _ } = &mut *exp.borrow_mut();
                 visitor(lhs);
                 visitor(rhs);
             }
@@ -1055,7 +1053,10 @@ impl Expression {
             Expression::Condition { condition, false_expr, true_expr } => {
                 condition.is_constant() && false_expr.is_constant() && true_expr.is_constant()
             }
-            Expression::BinaryExpression { lhs, rhs, .. } => lhs.is_constant() && rhs.is_constant(),
+            Expression::BinaryExpression(exp) => {
+                let BinaryExpression { lhs, rhs, op: _ } = &*exp.borrow();
+                lhs.is_constant() && rhs.is_constant()
+            }
             Expression::UnaryOp { sub, .. } => sub.is_constant(),
             // Array will turn into model, and they can't be considered as constant if the model
             // is used and the model is changed. CF issue #5249
@@ -1110,11 +1111,13 @@ impl Expression {
             self
         } else if ty.can_convert(&target_type) {
             let from = match (ty, &target_type) {
-                (Type::Percent, Type::Float32) => Expression::BinaryExpression {
-                    lhs: Box::new(self),
-                    rhs: Box::new(Expression::NumberLiteral(0.01, Unit::None)),
-                    op: '*',
-                },
+                (Type::Percent, Type::Float32) => {
+                    Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                        lhs: self,
+                        rhs: Expression::NumberLiteral(0.01, Unit::None),
+                        op: '*',
+                    })))
+                }
                 (ref from_ty @ Type::Struct(ref left), Type::Struct(ref right))
                     if left.fields != right.fields =>
                 {
@@ -1165,20 +1168,24 @@ impl Expression {
                                 |mut result, power: i8, builtin_fn: BuiltinFunction| {
                                     let op = if power < 0 { '*' } else { '/' };
                                     for _ in 0..power.abs() {
-                                        result = Expression::BinaryExpression {
-                                            lhs: Box::new(result),
-                                            rhs: Box::new(Expression::FunctionCall {
-                                                function: Box::new(
-                                                    Expression::BuiltinFunctionReference(
-                                                        builtin_fn.clone(),
-                                                        Some(node.to_source_location()),
+                                        result = Expression::BinaryExpression(Rc::new(
+                                            RefCell::new(BinaryExpression {
+                                                lhs: result,
+                                                rhs: Expression::FunctionCall {
+                                                    function: Box::new(
+                                                        Expression::BuiltinFunctionReference(
+                                                            builtin_fn.clone(),
+                                                            Some(node.to_source_location()),
+                                                        ),
                                                     ),
-                                                ),
-                                                arguments: vec![],
-                                                source_location: Some(node.to_source_location()),
+                                                    arguments: vec![],
+                                                    source_location: Some(
+                                                        node.to_source_location(),
+                                                    ),
+                                                },
+                                                op,
                                             }),
-                                            op,
-                                        }
+                                        ));
                                     }
                                     result
                                 };
@@ -1526,6 +1533,14 @@ pub struct BindingAnalysis {
 }
 
 #[derive(Debug, Clone)]
+pub struct BinaryExpression {
+    pub lhs: Expression,
+    pub rhs: Expression,
+    /// '+', '-', '/', '*', '=', '!', '<', '>', '≤', '≥', '&', '|'
+    pub op: char,
+}
+
+#[derive(Debug, Clone)]
 pub enum Path {
     Elements(Rc<RefCell<Vec<PathElement>>>),
     Events(Rc<RefCell<PathEvents>>),
@@ -1638,7 +1653,8 @@ pub fn pretty_print(f: &mut dyn std::fmt::Write, expression: &Expression) -> std
             write!(f, " {}= ", if *op == '=' { ' ' } else { *op })?;
             pretty_print(f, rhs)
         }
-        Expression::BinaryExpression { lhs, rhs, op } => {
+        Expression::BinaryExpression(exp) => {
+            let BinaryExpression { lhs, rhs, op } = &*exp.borrow();
             write!(f, "(")?;
             pretty_print(f, lhs)?;
             match *op {

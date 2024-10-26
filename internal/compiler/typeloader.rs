@@ -672,7 +672,7 @@ impl Snapshotter {
         &mut self,
         expr: &expression_tree::Expression,
     ) -> expression_tree::Expression {
-        use expression_tree::Expression;
+        use expression_tree::{BinaryExpression, Expression};
         match expr {
             Expression::CallbackReference(nr, node_or_token) => {
                 Expression::CallbackReference(nr.snapshot(self), node_or_token.clone())
@@ -738,11 +738,14 @@ impl Snapshotter {
                 op: *op,
                 node: node.clone(),
             },
-            Expression::BinaryExpression { lhs, rhs, op } => Expression::BinaryExpression {
-                lhs: Box::new(self.snapshot_expression(lhs)),
-                rhs: Box::new(self.snapshot_expression(rhs)),
-                op: *op,
-            },
+            Expression::BinaryExpression(exp) => {
+                let BinaryExpression { lhs, rhs, op } = &*exp.borrow();
+                Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                    lhs: self.snapshot_expression(lhs),
+                    rhs: self.snapshot_expression(rhs),
+                    op: *op,
+                })))
+            }
             Expression::UnaryOp { sub, op } => {
                 Expression::UnaryOp { sub: Box::new(self.snapshot_expression(sub)), op: *op }
             }

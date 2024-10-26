@@ -8,7 +8,7 @@ use smol_str::SmolStr;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::expression_tree::{BuiltinFunction, Expression};
+use crate::expression_tree::{BinaryExpression, BuiltinFunction, Expression};
 use crate::namedreference::NamedReference;
 use crate::object_tree::{
     recurse_elem_including_sub_components_no_borrow, visit_all_named_references_in_element,
@@ -58,19 +58,18 @@ pub fn lower_absolute_coordinates(component: &Rc<Component>) {
                     .map(|coord| {
                         (
                             coord.into(),
-                            Expression::BinaryExpression {
+                            Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
                                 lhs: Expression::StructFieldAccess {
                                     base: parent_position_var.clone(),
                                     name: coord.into(),
-                                }
-                                .into(),
+                                },
                                 rhs: Expression::PropertyReference(NamedReference::new(
                                     &elem,
                                     SmolStr::new_static(coord),
                                 ))
                                 .into(),
                                 op: '+',
-                            },
+                            }))),
                         )
                     })
                     .collect(),

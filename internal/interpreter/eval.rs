@@ -10,7 +10,7 @@ use corelib::model::{Model, ModelExt, ModelRc, VecModel};
 use corelib::rtti::AnimatedBindingKind;
 use corelib::{Brush, Color, PathData, SharedString, SharedVector};
 use i_slint_compiler::expression_tree::{
-    BuiltinFunction, EasingCurve, Expression, MinMaxOp, Path as ExprPath,
+    BinaryExpression, BuiltinFunction, EasingCurve, Expression, MinMaxOp, Path as ExprPath,
     PathElement as ExprPathElement, PathEvents as ExprPathEvents,
 };
 use i_slint_compiler::langtype::Type;
@@ -223,7 +223,8 @@ pub fn eval_expression(expression: &Expression, local_context: &mut EvalLocalCon
             eval_assignment(lhs, *op, rhs, local_context);
             Value::Void
         }
-        Expression::BinaryExpression { lhs, rhs, op } => {
+        Expression::BinaryExpression (exp) => {
+            let BinaryExpression{ lhs, rhs, op } = &*exp.borrow();
             let lhs = eval_expression(lhs, local_context);
             let rhs = eval_expression(rhs, local_context);
 

@@ -8,7 +8,7 @@
 // cSpell: ignore qualname
 
 use crate::diagnostics::{BuildDiagnostics, SourceLocation, Spanned};
-use crate::expression_tree::{self, BindingExpression, Expression, Unit};
+use crate::expression_tree::{self, BinaryExpression, BindingExpression, Expression, Unit};
 use crate::langtype::{
     BuiltinElement, BuiltinPropertyDefault, Enumeration, EnumerationValue, Function, NativeClass,
     Struct, Type,
@@ -534,14 +534,14 @@ impl TransitionPropertyAnimation {
     /// Return an expression which returns a boolean which is true if the transition is active.
     /// The state argument is an expression referencing the state property of type StateInfo
     pub fn condition(&self, state: Expression) -> Expression {
-        Expression::BinaryExpression {
-            lhs: Box::new(Expression::StructFieldAccess {
+        Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: Expression::StructFieldAccess {
                 base: Box::new(state),
                 name: (if self.is_out { "previous-state" } else { "current-state" }).into(),
-            }),
-            rhs: Box::new(Expression::NumberLiteral(self.state_id as _, Unit::None)),
+            },
+            rhs: Expression::NumberLiteral(self.state_id as _, Unit::None),
             op: '=',
-        }
+        })))
     }
 }
 

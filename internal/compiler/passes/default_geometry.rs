@@ -14,7 +14,8 @@ use std::rc::Rc;
 
 use crate::diagnostics::{BuildDiagnostics, Spanned};
 use crate::expression_tree::{
-    BindingExpression, BuiltinFunction, Expression, MinMaxOp, NamedReference, Unit,
+    BinaryExpression, BindingExpression, BuiltinFunction, Expression, MinMaxOp, NamedReference,
+    Unit,
 };
 use crate::langtype::{BuiltinElement, DefaultSizeBinding, Type};
 use crate::layout::{implicit_layout_info_call, LayoutConstraints, Orientation};
@@ -233,18 +234,18 @@ fn gen_layout_info_prop(elem: &ElementRc, diag: &mut BuildDiagnostics) {
 
     for child_info in child_infos {
         if let Some(h) = child_info.0 {
-            expr_h = Expression::BinaryExpression {
-                lhs: Box::new(std::mem::take(&mut expr_h)),
-                rhs: Box::new(h),
+            expr_h = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: std::mem::take(&mut expr_h),
+                rhs: h,
                 op: '+',
-            };
+            })));
         }
         if let Some(v) = child_info.1 {
-            expr_v = Expression::BinaryExpression {
-                lhs: Box::new(std::mem::take(&mut expr_v)),
-                rhs: Box::new(v),
+            expr_v = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: std::mem::take(&mut expr_v),
+                rhs: v,
                 op: '+',
-            };
+            })));
         }
     }
 
@@ -357,18 +358,14 @@ fn fix_percent_size(
         );
         let fill =
             matches!(b.expression, Expression::NumberLiteral(x, _) if (x - 100.).abs() < 0.001);
-        b.expression = Expression::BinaryExpression {
-            lhs: Box::new(std::mem::take(&mut b.expression).maybe_convert_to(
-                Type::Float32,
-                &b.span,
-                diag,
-            )),
-            rhs: Box::new(Expression::PropertyReference(NamedReference::new(
+        b.expression = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: std::mem::take(&mut b.expression).maybe_convert_to(Type::Float32, &b.span, diag),
+            rhs: Expression::PropertyReference(NamedReference::new(
                 &parent,
                 SmolStr::new_static(property),
-            ))),
+            )),
             op: '*',
-        };
+        })));
         fill
     } else {
         diag.push_error("Cannot find parent property to apply relative length".into(), &b.span);
@@ -421,17 +418,17 @@ fn make_default_aspect_ratio_preserving_binding(
     let given_size_property = SmolStr::new_static(given_size_property);
 
     let ratio = if elem.borrow().is_binding_set("source-clip-height", false) {
-        Expression::BinaryExpression {
-            lhs: Box::new(Expression::PropertyReference(NamedReference::new(
+        Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: Expression::PropertyReference(NamedReference::new(
                 elem,
                 format_smolstr!("source-clip-{missing_size_property}"),
-            ))),
-            rhs: Box::new(Expression::PropertyReference(NamedReference::new(
+            )),
+            rhs: Expression::PropertyReference(NamedReference::new(
                 elem,
                 format_smolstr!("source-clip-{given_size_property}"),
-            ))),
+            )),
             op: '/',
-        }
+        })))
     } else {
         let implicit_size_var = Box::new(Expression::ReadLocalVariable {
             name: "image_implicit_size".into(),
@@ -453,24 +450,24 @@ fn make_default_aspect_ratio_preserving_binding(
                     source_location: None,
                 }),
             },
-            Expression::BinaryExpression {
-                lhs: Box::new(Expression::StructFieldAccess {
+            Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: Expression::StructFieldAccess {
                     base: implicit_size_var.clone(),
                     name: missing_size_property.clone(),
-                }),
-                rhs: Box::new(Expression::StructFieldAccess {
+                },
+                rhs: Expression::StructFieldAccess {
                     base: implicit_size_var,
                     name: given_size_property.clone(),
-                }),
+                },
                 op: '/',
-            },
+            }))),
         ])
     };
-    let binding = Expression::BinaryExpression {
-        lhs: Box::new(ratio),
-        rhs: Expression::PropertyReference(NamedReference::new(elem, given_size_property)).into(),
+    let binding = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+        lhs: ratio,
+        rhs: Expression::PropertyReference(NamedReference::new(elem, given_size_property)),
         op: '*',
-    };
+    })));
 
     elem.borrow_mut().bindings.insert(missing_size_property, RefCell::new(binding.into()));
 }
@@ -486,17 +483,19 @@ fn maybe_center_in_parent(
     }
 
     let size_prop = SmolStr::new_static(size_prop);
-    let diff = Expression::BinaryExpression {
-        lhs: Expression::PropertyReference(NamedReference::new(parent, size_prop.clone())).into(),
+    let diff = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+        lhs: Expression::PropertyReference(NamedReference::new(parent, size_prop.clone())),
         op: '-',
-        rhs: Expression::PropertyReference(NamedReference::new(elem, size_prop)).into(),
-    };
+        rhs: Expression::PropertyReference(NamedReference::new(elem, size_prop)),
+    })));
 
     let pos_prop = SmolStr::new_static(pos_prop);
-    elem.borrow_mut().set_binding_if_not_set(pos_prop, || Expression::BinaryExpression {
-        lhs: diff.into(),
-        op: '/',
-        rhs: Expression::NumberLiteral(2., Unit::None).into(),
+    elem.borrow_mut().set_binding_if_not_set(pos_prop, || {
+        Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: diff,
+            op: '/',
+            rhs: Expression::NumberLiteral(2., Unit::None),
+        })))
     });
 }
 
@@ -510,20 +509,22 @@ fn adjust_image_clip_rect(elem: &ElementRc, builtin: &Rc<BuiltinElement>) {
         let source = NamedReference::new(elem, SmolStr::new_static("source"));
         let x = NamedReference::new(elem, SmolStr::new_static("source-clip-x"));
         let y = NamedReference::new(elem, SmolStr::new_static("source-clip-y"));
-        let make_expr = |dim: &str, prop: NamedReference| Expression::BinaryExpression {
-            lhs: Box::new(Expression::StructFieldAccess {
-                base: Box::new(Expression::FunctionCall {
-                    function: Box::new(Expression::BuiltinFunctionReference(
-                        BuiltinFunction::ImageSize,
-                        None,
-                    )),
-                    arguments: vec![Expression::PropertyReference(source.clone())],
-                    source_location: None,
-                }),
-                name: dim.into(),
-            }),
-            rhs: Expression::PropertyReference(prop).into(),
-            op: '-',
+        let make_expr = |dim: &str, prop: NamedReference| {
+            Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: Expression::StructFieldAccess {
+                    base: Box::new(Expression::FunctionCall {
+                        function: Box::new(Expression::BuiltinFunctionReference(
+                            BuiltinFunction::ImageSize,
+                            None,
+                        )),
+                        arguments: vec![Expression::PropertyReference(source.clone())],
+                        source_location: None,
+                    }),
+                    name: dim.into(),
+                },
+                rhs: Expression::PropertyReference(prop).into(),
+                op: '-',
+            })))
         };
 
         elem.borrow_mut()

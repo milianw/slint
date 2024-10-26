@@ -9,11 +9,14 @@
 //! be further inlined as it may expends to native widget that needs inlining
 
 use crate::diagnostics::BuildDiagnostics;
-use crate::expression_tree::{BindingExpression, Expression, MinMaxOp, NamedReference, Unit};
+use crate::expression_tree::{
+    BinaryExpression, BindingExpression, Expression, MinMaxOp, NamedReference, Unit,
+};
 use crate::langtype::{ElementType, Type};
 use crate::object_tree::*;
 use smol_str::{format_smolstr, SmolStr};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub async fn lower_tabwidget(
     doc: &Document,
@@ -91,7 +94,7 @@ fn process_tabwidget(
         set_geometry_prop(elem, child, "y", diag);
         set_geometry_prop(elem, child, "width", diag);
         set_geometry_prop(elem, child, "height", diag);
-        let condition = Expression::BinaryExpression {
+        let condition = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
             lhs: Expression::PropertyReference(NamedReference::new(
                 elem,
                 SmolStr::new_static("current-index"),
@@ -99,7 +102,7 @@ fn process_tabwidget(
             .into(),
             rhs: Expression::NumberLiteral(index as _, Unit::None).into(),
             op: '=',
-        };
+        })));
         let old = child
             .borrow_mut()
             .bindings

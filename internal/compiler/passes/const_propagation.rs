@@ -38,67 +38,75 @@ fn simplify_expression(expr: &mut Expression) -> bool {
             }
             false
         }
-        Expression::BinaryExpression { lhs, op, rhs } => {
-            let mut can_inline = simplify_expression(lhs);
-            can_inline &= simplify_expression(rhs);
+        Expression::BinaryExpression(exp) => {
+            let (can_inline, new) = {
+                let BinaryExpression { lhs, rhs, op } = &mut *exp.borrow_mut();
+                let mut can_inline = simplify_expression(lhs);
+                can_inline &= simplify_expression(rhs);
 
-            let new = match (*op, &mut **lhs, &mut **rhs) {
-                ('+', Expression::StringLiteral(a), Expression::StringLiteral(b)) => {
-                    Some(Expression::StringLiteral(format_smolstr!("{}{}", a, b)))
-                }
-                ('+', Expression::NumberLiteral(a, un1), Expression::NumberLiteral(b, un2))
-                    if un1 == un2 =>
-                {
-                    Some(Expression::NumberLiteral(*a + *b, *un1))
-                }
-                ('-', Expression::NumberLiteral(a, un1), Expression::NumberLiteral(b, un2))
-                    if un1 == un2 =>
-                {
-                    Some(Expression::NumberLiteral(*a - *b, *un1))
-                }
-                ('*', Expression::NumberLiteral(a, un1), Expression::NumberLiteral(b, un2))
-                    if *un1 == Unit::None || *un2 == Unit::None =>
-                {
-                    let preserved_unit = if *un1 == Unit::None { *un2 } else { *un1 };
-                    Some(Expression::NumberLiteral(*a * *b, preserved_unit))
-                }
-                (
-                    '/',
-                    Expression::NumberLiteral(a, un1),
-                    Expression::NumberLiteral(b, Unit::None),
-                ) => Some(Expression::NumberLiteral(*a / *b, *un1)),
-                // TODO: take care of * and / when both numbers have units
-                ('=' | '!', Expression::NumberLiteral(a, _), Expression::NumberLiteral(b, _)) => {
-                    Some(Expression::BoolLiteral((a == b) == (*op == '=')))
-                }
-                ('=' | '!', Expression::StringLiteral(a), Expression::StringLiteral(b)) => {
-                    Some(Expression::BoolLiteral((a == b) == (*op == '=')))
-                }
-                ('=' | '!', Expression::EnumerationValue(a), Expression::EnumerationValue(b)) => {
-                    Some(Expression::BoolLiteral((a == b) == (*op == '=')))
-                }
-                // TODO: more types and more comparison operators
-                ('&', Expression::BoolLiteral(false), _) => {
-                    can_inline = true;
-                    Some(Expression::BoolLiteral(false))
-                }
-                ('&', _, Expression::BoolLiteral(false)) => {
-                    can_inline = true;
-                    Some(Expression::BoolLiteral(false))
-                }
-                ('&', Expression::BoolLiteral(true), e) => Some(std::mem::take(e)),
-                ('&', e, Expression::BoolLiteral(true)) => Some(std::mem::take(e)),
-                ('|', Expression::BoolLiteral(true), _) => {
-                    can_inline = true;
-                    Some(Expression::BoolLiteral(true))
-                }
-                ('|', _, Expression::BoolLiteral(true)) => {
-                    can_inline = true;
-                    Some(Expression::BoolLiteral(true))
-                }
-                ('|', Expression::BoolLiteral(false), e) => Some(std::mem::take(e)),
-                ('|', e, Expression::BoolLiteral(false)) => Some(std::mem::take(e)),
-                _ => None,
+                let new = match (*op, &mut *lhs, &mut *rhs) {
+                    ('+', Expression::StringLiteral(a), Expression::StringLiteral(b)) => {
+                        Some(Expression::StringLiteral(format_smolstr!("{}{}", a, b)))
+                    }
+                    ('+', Expression::NumberLiteral(a, un1), Expression::NumberLiteral(b, un2))
+                        if un1 == un2 =>
+                    {
+                        Some(Expression::NumberLiteral(*a + *b, *un1))
+                    }
+                    ('-', Expression::NumberLiteral(a, un1), Expression::NumberLiteral(b, un2))
+                        if un1 == un2 =>
+                    {
+                        Some(Expression::NumberLiteral(*a - *b, *un1))
+                    }
+                    ('*', Expression::NumberLiteral(a, un1), Expression::NumberLiteral(b, un2))
+                        if *un1 == Unit::None || *un2 == Unit::None =>
+                    {
+                        let preserved_unit = if *un1 == Unit::None { *un2 } else { *un1 };
+                        Some(Expression::NumberLiteral(*a * *b, preserved_unit))
+                    }
+                    (
+                        '/',
+                        Expression::NumberLiteral(a, un1),
+                        Expression::NumberLiteral(b, Unit::None),
+                    ) => Some(Expression::NumberLiteral(*a / *b, *un1)),
+                    // TODO: take care of * and / when both numbers have units
+                    (
+                        '=' | '!',
+                        Expression::NumberLiteral(a, _),
+                        Expression::NumberLiteral(b, _),
+                    ) => Some(Expression::BoolLiteral((a == b) == (*op == '='))),
+                    ('=' | '!', Expression::StringLiteral(a), Expression::StringLiteral(b)) => {
+                        Some(Expression::BoolLiteral((a == b) == (*op == '=')))
+                    }
+                    (
+                        '=' | '!',
+                        Expression::EnumerationValue(a),
+                        Expression::EnumerationValue(b),
+                    ) => Some(Expression::BoolLiteral((a == b) == (*op == '='))),
+                    // TODO: more types and more comparison operators
+                    ('&', Expression::BoolLiteral(false), _) => {
+                        can_inline = true;
+                        Some(Expression::BoolLiteral(false))
+                    }
+                    ('&', _, Expression::BoolLiteral(false)) => {
+                        can_inline = true;
+                        Some(Expression::BoolLiteral(false))
+                    }
+                    ('&', Expression::BoolLiteral(true), e) => Some(std::mem::take(e)),
+                    ('&', e, Expression::BoolLiteral(true)) => Some(std::mem::take(e)),
+                    ('|', Expression::BoolLiteral(true), _) => {
+                        can_inline = true;
+                        Some(Expression::BoolLiteral(true))
+                    }
+                    ('|', _, Expression::BoolLiteral(true)) => {
+                        can_inline = true;
+                        Some(Expression::BoolLiteral(true))
+                    }
+                    ('|', Expression::BoolLiteral(false), e) => Some(std::mem::take(e)),
+                    ('|', e, Expression::BoolLiteral(false)) => Some(std::mem::take(e)),
+                    _ => None,
+                };
+                (can_inline, new)
             };
             if let Some(new) = new {
                 *expr = new;

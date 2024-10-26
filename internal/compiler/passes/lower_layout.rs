@@ -373,18 +373,18 @@ fn lower_box_layout(
         SmolStr::new_static(ortho),
     ));
     if let Some(p) = begin_padding {
-        size_expr = Expression::BinaryExpression {
-            lhs: Box::new(std::mem::take(&mut size_expr)),
-            rhs: Box::new(Expression::PropertyReference(p.clone())),
+        size_expr = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: std::mem::take(&mut size_expr),
+            rhs: Expression::PropertyReference(p.clone()),
             op: '-',
-        }
+        })))
     }
     if let Some(p) = end_padding {
-        size_expr = Expression::BinaryExpression {
-            lhs: Box::new(std::mem::take(&mut size_expr)),
-            rhs: Box::new(Expression::PropertyReference(p.clone())),
+        size_expr = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: std::mem::take(&mut size_expr),
+            rhs: Expression::PropertyReference(p.clone()),
             op: '-',
-        }
+        })))
     }
 
     for layout_child in &layout_children {

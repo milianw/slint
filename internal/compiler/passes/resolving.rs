@@ -17,6 +17,7 @@ use crate::parser::{identifier_text, syntax_nodes, NodeOrToken, SyntaxKind, Synt
 use crate::typeregister::TypeRegister;
 use core::num::IntErrorKind;
 use smol_str::{SmolStr, ToSmolStr};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -577,23 +578,29 @@ impl Expression {
                 for (i, (_, e)) in middle.iter_mut().enumerate() {
                     debug_assert!(matches!(e, Expression::Invalid));
                     // e = begin + (i+1) * (end - begin) / (pos+1)
-                    *e = Expression::BinaryExpression {
-                        lhs: Box::new(begin.clone()),
-                        rhs: Box::new(Expression::BinaryExpression {
-                            lhs: Box::new(Expression::BinaryExpression {
-                                lhs: Box::new(Expression::NumberLiteral(i as f64 + 1., Unit::None)),
-                                rhs: Box::new(Expression::BinaryExpression {
-                                    lhs: Box::new(end.clone()),
-                                    rhs: Box::new(begin.clone()),
-                                    op: '-',
-                                }),
-                                op: '*',
-                            }),
-                            rhs: Box::new(Expression::NumberLiteral(pos as f64 + 1., Unit::None)),
-                            op: '/',
-                        }),
+                    *e = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                        lhs: begin.clone(),
+                        rhs: Expression::BinaryExpression(Rc::new(RefCell::new(
+                            BinaryExpression {
+                                lhs: Expression::BinaryExpression(Rc::new(RefCell::new(
+                                    BinaryExpression {
+                                        lhs: Expression::NumberLiteral(i as f64 + 1., Unit::None),
+                                        rhs: Expression::BinaryExpression(Rc::new(RefCell::new(
+                                            BinaryExpression {
+                                                lhs: end.clone(),
+                                                rhs: begin.clone(),
+                                                op: '-',
+                                            },
+                                        ))),
+                                        op: '*',
+                                    },
+                                ))),
+                                rhs: Expression::NumberLiteral(pos as f64 + 1., Unit::None),
+                                op: '/',
+                            },
+                        ))),
                         op: '+',
-                    };
+                    })));
                 }
             }
             start += pos + 1;
@@ -1111,33 +1118,27 @@ impl Expression {
                     };
                     match (has_unit(&lhs_ty), has_unit(&rhs_ty)) {
                         (true, true) => {
-                            return Expression::BinaryExpression {
-                                lhs: Box::new(lhs),
-                                rhs: Box::new(rhs),
-                                op,
-                            }
+                            return Expression::BinaryExpression(Rc::new(RefCell::new(
+                                BinaryExpression { lhs, rhs, op },
+                            )))
                         }
                         (true, false) => {
-                            return Expression::BinaryExpression {
-                                lhs: Box::new(lhs),
-                                rhs: Box::new(rhs.maybe_convert_to(
-                                    Type::Float32,
-                                    &rhs_n,
-                                    ctx.diag,
-                                )),
-                                op,
-                            }
+                            return Expression::BinaryExpression(Rc::new(RefCell::new(
+                                BinaryExpression {
+                                    lhs,
+                                    rhs: rhs.maybe_convert_to(Type::Float32, &rhs_n, ctx.diag),
+                                    op,
+                                },
+                            )))
                         }
                         (false, true) => {
-                            return Expression::BinaryExpression {
-                                lhs: Box::new(lhs.maybe_convert_to(
-                                    Type::Float32,
-                                    &lhs_n,
-                                    ctx.diag,
-                                )),
-                                rhs: Box::new(rhs),
-                                op,
-                            }
+                            return Expression::BinaryExpression(Rc::new(RefCell::new(
+                                BinaryExpression {
+                                    lhs: lhs.maybe_convert_to(Type::Float32, &lhs_n, ctx.diag),
+                                    rhs,
+                                    op,
+                                },
+                            )))
                         }
                         (false, false) => Type::Float32,
                     }
@@ -1146,11 +1147,11 @@ impl Expression {
                 }
             }
         };
-        Expression::BinaryExpression {
-            lhs: Box::new(lhs.maybe_convert_to(expected_ty.clone(), &lhs_n, ctx.diag)),
-            rhs: Box::new(rhs.maybe_convert_to(expected_ty, &rhs_n, ctx.diag)),
+        Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+            lhs: lhs.maybe_convert_to(expected_ty.clone(), &lhs_n, ctx.diag),
+            rhs: rhs.maybe_convert_to(expected_ty, &rhs_n, ctx.diag),
             op,
-        }
+        })))
     }
 
     fn from_unaryop_expression_node(
@@ -1297,11 +1298,11 @@ impl Expression {
         });
         let mut result = exprs.next().unwrap_or_default();
         for x in exprs {
-            result = Expression::BinaryExpression {
-                lhs: Box::new(std::mem::take(&mut result)),
-                rhs: Box::new(x),
+            result = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: std::mem::take(&mut result),
+                rhs: x,
                 op: '+',
-            }
+            })))
         }
         result
     }

@@ -6,11 +6,14 @@
 
 use crate::diagnostics::{BuildDiagnostics, Spanned};
 use crate::expression_tree::{
-    BuiltinFunction, BuiltinMacroFunction, EasingCurve, Expression, MinMaxOp, Unit,
+    BinaryExpression, BuiltinFunction, BuiltinMacroFunction, EasingCurve, Expression, MinMaxOp,
+    Unit,
 };
 use crate::langtype::{EnumerationValue, Type};
 use crate::parser::NodeOrToken;
 use smol_str::{format_smolstr, ToSmolStr};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 /// Used for uniquely name some variables
 static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
@@ -245,11 +248,11 @@ fn rgb_macro(
         .map(|(i, (expr, n))| {
             if i < 3 {
                 if expr.ty() == Type::Percent {
-                    Expression::BinaryExpression {
-                        lhs: Box::new(expr.maybe_convert_to(Type::Float32, &n, diag)),
-                        rhs: Box::new(Expression::NumberLiteral(255., Unit::None)),
+                    Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                        lhs: expr.maybe_convert_to(Type::Float32, &n, diag),
+                        rhs: Expression::NumberLiteral(255., Unit::None),
                         op: '*',
-                    }
+                    })))
                 } else {
                     expr.maybe_convert_to(Type::Float32, &n, diag)
                 }
@@ -308,15 +311,15 @@ fn debug_macro(
         let val = to_debug_string(expr, node, diag);
         string = Some(match string {
             None => val,
-            Some(string) => Expression::BinaryExpression {
-                lhs: Box::new(string),
+            Some(string) => Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: string,
                 op: '+',
-                rhs: Box::new(Expression::BinaryExpression {
-                    lhs: Box::new(Expression::StringLiteral(" ".into())),
+                rhs: Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                    lhs: Expression::StringLiteral(" ".into()),
                     op: '+',
-                    rhs: Box::new(val),
-                }),
-            },
+                    rhs: val,
+                }))),
+            }))),
         });
     }
     let sl = node.map(|node| node.to_source_location());
@@ -363,19 +366,19 @@ fn to_debug_string(
         | Type::Rem
         | Type::Angle
         | Type::Percent
-        | Type::UnitProduct(_) => Expression::BinaryExpression {
-            lhs: Box::new(
-                Expression::Cast { from: Box::new(expr), to: Type::Float32 }.maybe_convert_to(
+        | Type::UnitProduct(_) => {
+            Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                lhs: Expression::Cast { from: Box::new(expr), to: Type::Float32 }.maybe_convert_to(
                     Type::String,
                     &node,
                     diag,
                 ),
-            ),
-            op: '+',
-            rhs: Box::new(Expression::StringLiteral(
-                Type::UnitProduct(ty.as_unit_product().unwrap()).to_smolstr(),
-            )),
-        },
+                op: '+',
+                rhs: Expression::StringLiteral(
+                    Type::UnitProduct(ty.as_unit_product().unwrap()).to_smolstr(),
+                ),
+            })))
+        }
         Type::Bool => Expression::Condition {
             condition: Box::new(expr),
             true_expr: Box::new(Expression::StringLiteral("true".into())),
@@ -404,29 +407,31 @@ fn to_debug_string(
                     node.clone(),
                     diag,
                 );
-                let field = Expression::BinaryExpression {
-                    lhs: Box::new(Expression::StringLiteral(field_name)),
+                let field = Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                    lhs: Expression::StringLiteral(field_name),
                     op: '+',
-                    rhs: Box::new(value),
-                };
+                    rhs: value,
+                })));
                 string = Some(match string {
                     None => field,
-                    Some(x) => Expression::BinaryExpression {
-                        lhs: Box::new(x),
-                        op: '+',
-                        rhs: Box::new(field),
-                    },
+                    Some(x) => {
+                        Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                            lhs: x,
+                            op: '+',
+                            rhs: field,
+                        })))
+                    }
                 });
             }
             match string {
                 None => Expression::StringLiteral("{}".into()),
                 Some(string) => Expression::CodeBlock(vec![
                     Expression::StoreLocalVariable { name: local_object, value: Box::new(expr) },
-                    Expression::BinaryExpression {
-                        lhs: Box::new(string),
+                    Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
+                        lhs: string,
                         op: '+',
-                        rhs: Box::new(Expression::StringLiteral(" }".into())),
-                    },
+                        rhs: Expression::StringLiteral(" }".into()),
+                    }))),
                 ]),
             }
         }
@@ -440,17 +445,19 @@ fn to_debug_string(
                 Expression::StringLiteral(format_smolstr!("Error: invalid value for {}", ty));
             for (idx, val) in enu.values.iter().enumerate() {
                 cond = Expression::Condition {
-                    condition: Box::new(Expression::BinaryExpression {
-                        lhs: Box::new(Expression::ReadLocalVariable {
-                            name: local_object.into(),
-                            ty: ty.clone(),
-                        }),
-                        rhs: Box::new(Expression::EnumerationValue(EnumerationValue {
-                            value: idx,
-                            enumeration: enu.clone(),
-                        })),
-                        op: '=',
-                    }),
+                    condition: Box::new(Expression::BinaryExpression(Rc::new(RefCell::new(
+                        BinaryExpression {
+                            lhs: Expression::ReadLocalVariable {
+                                name: local_object.into(),
+                                ty: ty.clone(),
+                            },
+                            rhs: Expression::EnumerationValue(EnumerationValue {
+                                value: idx,
+                                enumeration: enu.clone(),
+                            }),
+                            op: '=',
+                        },
+                    )))),
                     true_expr: Box::new(Expression::StringLiteral(val.clone())),
                     false_expr: Box::new(cond),
                 };

@@ -83,11 +83,13 @@ fn lower_state_in_element(
                 }
             };
             let new_expr = Expression::Condition {
-                condition: Box::new(Expression::BinaryExpression {
-                    lhs: Box::new(state_property_ref.clone()),
-                    rhs: Box::new(Expression::NumberLiteral((idx + 1) as _, Unit::None)),
-                    op: '=',
-                }),
+                condition: Box::new(Expression::BinaryExpression(Rc::new(RefCell::new(
+                    BinaryExpression {
+                        lhs: state_property_ref.clone(),
+                        rhs: Expression::NumberLiteral((idx + 1) as _, Unit::None),
+                        op: '=',
+                    },
+                )))),
                 true_expr: Box::new(expr),
                 false_expr: Box::new(property_expr),
             };

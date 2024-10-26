@@ -18,7 +18,9 @@ use crate::llr::Expression as llr_Expression;
 use crate::namedreference::NamedReference;
 use crate::object_tree::{Element, ElementRc, PropertyAnimation};
 use crate::{
-    expression_tree::{BuiltinFunction, Expression as tree_Expression},
+    expression_tree::{
+        BinaryExpression as tree_BinaryExpression, BuiltinFunction, Expression as tree_Expression,
+    },
     typeregister::BUILTIN,
 };
 
@@ -154,11 +156,14 @@ pub fn lower_expression(
         tree_Expression::SelfAssignment { lhs, rhs, op, .. } => {
             lower_assignment(lhs, rhs, *op, ctx)
         }
-        tree_Expression::BinaryExpression { lhs, rhs, op } => llr_Expression::BinaryExpression {
-            lhs: Box::new(lower_expression(lhs, ctx)),
-            rhs: Box::new(lower_expression(rhs, ctx)),
-            op: *op,
-        },
+        tree_Expression::BinaryExpression(exp) => {
+            let tree_BinaryExpression { lhs, rhs, op } = &*exp.borrow();
+            llr_Expression::BinaryExpression {
+                lhs: Box::new(lower_expression(lhs, ctx)),
+                rhs: Box::new(lower_expression(rhs, ctx)),
+                op: *op,
+            }
+        }
         tree_Expression::UnaryOp { sub, op } => {
             llr_Expression::UnaryOp { sub: Box::new(lower_expression(sub, ctx)), op: *op }
         }
@@ -273,15 +278,16 @@ fn lower_assignment(
                         } else if op == '=' {
                             rhs.clone()
                         } else {
-                            tree_Expression::BinaryExpression {
-                                lhs: tree_Expression::StructFieldAccess {
-                                    base: lower_base.clone().into(),
-                                    name: field.clone(),
-                                }
-                                .into(),
-                                rhs: Box::new(rhs.clone()),
-                                op,
-                            }
+                            tree_Expression::BinaryExpression(Rc::new(RefCell::new(
+                                tree_BinaryExpression {
+                                    lhs: tree_Expression::StructFieldAccess {
+                                        base: lower_base.clone().into(),
+                                        name: field.clone(),
+                                    },
+                                    rhs: rhs.clone(),
+                                    op,
+                                },
+                            )))
                         };
                         values.insert(field.clone(), e);
                     }
