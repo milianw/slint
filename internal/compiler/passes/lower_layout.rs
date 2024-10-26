@@ -789,7 +789,7 @@ fn eval_const_expr(
                 Some(*v as u16)
             }
         }
-        Expression::Cast { from, .. } => eval_const_expr(from, name, span, diag),
+        Expression::Cast { from, .. } => eval_const_expr(&*from.borrow(), name, span, diag),
         _ => {
             diag.push_error(format!("'{}' must be an integer literal", name), span);
             None

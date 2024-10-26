@@ -124,19 +124,23 @@ fn simplify_expression(expr: &mut Expression) -> bool {
             r
         }
         Expression::Cast { from, to } => {
-            let can_inline = simplify_expression(from);
-            let new = if from.ty() == *to {
-                Some(std::mem::take(&mut **from))
-            } else {
-                match (&**from, to) {
-                    (Expression::NumberLiteral(x, Unit::None), Type::String) => {
-                        Some(Expression::StringLiteral((*x).to_smolstr()))
+            let (can_inline, new) = {
+                let from = &mut *from.borrow_mut();
+                let can_inline = simplify_expression(from);
+                let new = if from.ty() == *to {
+                    Some(std::mem::take(&mut *from))
+                } else {
+                    match (&*from, to) {
+                        (Expression::NumberLiteral(x, Unit::None), Type::String) => {
+                            Some(Expression::StringLiteral((*x).to_smolstr()))
+                        }
+                        (Expression::Struct { values, .. }, to @ Type::Struct { .. }) => {
+                            Some(Expression::Struct { ty: to.clone(), values: values.clone() })
+                        }
+                        _ => None,
                     }
-                    (Expression::Struct { values, .. }, to @ Type::Struct { .. }) => {
-                        Some(Expression::Struct { ty: to.clone(), values: values.clone() })
-                    }
-                    _ => None,
-                }
+                };
+                (can_inline, new)
             };
             if let Some(new) = new {
                 *expr = new;

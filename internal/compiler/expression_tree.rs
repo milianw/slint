@@ -579,7 +579,7 @@ pub enum Expression {
 
     /// Cast an expression to the given type
     Cast {
-        from: Box<Expression>,
+        from: Rc<RefCell<Expression>>,
         to: Type,
     },
 
@@ -825,7 +825,7 @@ impl Expression {
             }
             Expression::RepeaterIndexReference { .. } => {}
             Expression::RepeaterModelReference { .. } => {}
-            Expression::Cast { from, .. } => visitor(from),
+            Expression::Cast { from, .. } => visitor(&*from.borrow()),
             Expression::CodeBlock(sub) => {
                 sub.iter().for_each(visitor);
             }
@@ -929,7 +929,7 @@ impl Expression {
             }
             Expression::RepeaterIndexReference { .. } => {}
             Expression::RepeaterModelReference { .. } => {}
-            Expression::Cast { from, .. } => visitor(from),
+            Expression::Cast { from, .. } => visitor(&mut *from.borrow_mut()),
             Expression::CodeBlock(sub) => {
                 sub.iter_mut().for_each(visitor);
             }
@@ -1042,7 +1042,7 @@ impl Expression {
             Expression::BuiltinMacroReference { .. } => true,
             Expression::StructFieldAccess { base, .. } => base.is_constant(),
             Expression::ArrayIndex { array, index } => array.is_constant() && index.is_constant(),
-            Expression::Cast { from, .. } => from.is_constant(),
+            Expression::Cast { from, .. } => from.borrow().is_constant(),
             Expression::CodeBlock(sub) => sub.len() == 1 && sub.first().unwrap().is_constant(),
             Expression::FunctionCall { function, arguments, .. } => {
                 // Assume that constant function are, in fact, pure
@@ -1215,7 +1215,7 @@ impl Expression {
                     _ => self,
                 },
             };
-            Expression::Cast { from: Box::new(from), to: target_type }
+            Expression::Cast { from: Rc::new(RefCell::new(from)), to: target_type }
         } else if matches!(
             (&ty, &target_type, &self),
             (Type::Array(_), Type::Array(_), Expression::Array { .. })
@@ -1293,7 +1293,7 @@ impl Expression {
             Type::Float32 => Expression::NumberLiteral(0., Unit::None),
             Type::String => Expression::StringLiteral(SmolStr::default()),
             Type::Int32 | Type::Color | Type::UnitProduct(_) => Expression::Cast {
-                from: Box::new(Expression::NumberLiteral(0., Unit::None)),
+                from: Rc::new(RefCell::new(Expression::NumberLiteral(0., Unit::None))),
                 to: ty.clone(),
             },
             Type::Duration => Expression::NumberLiteral(0., Unit::Ms),
@@ -1323,7 +1323,7 @@ impl Expression {
             },
             Type::Easing => Expression::EasingCurve(EasingCurve::default()),
             Type::Brush => Expression::Cast {
-                from: Box::new(Expression::default_value_for_type(&Type::Color)),
+                from: Rc::new(RefCell::new(Expression::default_value_for_type(&Type::Color))),
                 to: Type::Brush,
             },
             Type::Enumeration(enumeration) => {
@@ -1402,7 +1402,7 @@ impl Expression {
 
 fn model_inner_type(model: &Expression) -> Type {
     match model {
-        Expression::Cast { from, to: Type::Model } => model_inner_type(from),
+        Expression::Cast { from, to: Type::Model } => model_inner_type(&*from.borrow()),
         Expression::CodeBlock(cb) => cb.last().map_or(Type::Invalid, model_inner_type),
         _ => match model.ty() {
             Type::Float32 | Type::Int32 => Type::Int32,
@@ -1628,7 +1628,7 @@ pub fn pretty_print(f: &mut dyn std::fmt::Write, expression: &Expression) -> std
         }
         Expression::Cast { from, to } => {
             write!(f, "(")?;
-            pretty_print(f, from)?;
+            pretty_print(f, &*from.borrow())?;
             write!(f, "/* as {} */)", to)
         }
         Expression::CodeBlock(c) => {

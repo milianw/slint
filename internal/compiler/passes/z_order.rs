@@ -76,7 +76,7 @@ fn eval_const_expr(
 ) -> Option<f64> {
     match expression {
         Expression::NumberLiteral(v, Unit::None) => Some(*v),
-        Expression::Cast { from, .. } => eval_const_expr(from, name, span, diag),
+        Expression::Cast { from, .. } => eval_const_expr(&*from.borrow(), name, span, diag),
         Expression::UnaryOp { sub, op: '-' } => eval_const_expr(sub, name, span, diag).map(|v| -v),
         Expression::UnaryOp { sub, op: '+' } => eval_const_expr(sub, name, span, diag),
         _ => {

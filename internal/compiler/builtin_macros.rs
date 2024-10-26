@@ -176,14 +176,13 @@ fn mod_macro(
         Expression::FunctionCall { function, arguments: arguments.collect(), source_location }
     } else {
         Expression::Cast {
-            from: Expression::FunctionCall {
+            from: Rc::new(RefCell::new(Expression::FunctionCall {
                 function,
                 arguments: arguments
-                    .map(|a| Expression::Cast { from: a.into(), to: Type::Float32 })
+                    .map(|a| Expression::Cast { from: Rc::new(RefCell::new(a)), to: Type::Float32 })
                     .collect(),
                 source_location,
-            }
-            .into(),
+            })),
             to: common_ty.clone(),
         }
     }
@@ -216,15 +215,17 @@ fn abs_macro(
         Expression::FunctionCall { function, arguments, source_location }
     } else {
         Expression::Cast {
-            from: Expression::FunctionCall {
+            from: Rc::new(RefCell::new(Expression::FunctionCall {
                 function,
                 arguments: args
                     .into_iter()
-                    .map(|(a, _)| Expression::Cast { from: a.into(), to: Type::Float32 })
+                    .map(|(a, _)| Expression::Cast {
+                        from: Rc::new(RefCell::new(a)),
+                        to: Type::Float32,
+                    })
                     .collect(),
                 source_location,
-            }
-            .into(),
+            })),
             to: ty,
         }
     }
@@ -368,11 +369,8 @@ fn to_debug_string(
         | Type::Percent
         | Type::UnitProduct(_) => {
             Expression::BinaryExpression(Rc::new(RefCell::new(BinaryExpression {
-                lhs: Expression::Cast { from: Box::new(expr), to: Type::Float32 }.maybe_convert_to(
-                    Type::String,
-                    &node,
-                    diag,
-                ),
+                lhs: Expression::Cast { from: Rc::new(RefCell::new(expr)), to: Type::Float32 }
+                    .maybe_convert_to(Type::String, &node, diag),
                 op: '+',
                 rhs: Expression::StringLiteral(
                     Type::UnitProduct(ty.as_unit_product().unwrap()).to_smolstr(),

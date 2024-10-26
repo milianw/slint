@@ -114,9 +114,10 @@ pub fn lower_expression(
             array: Box::new(lower_expression(array, ctx)),
             index: Box::new(lower_expression(index, ctx)),
         },
-        tree_Expression::Cast { from, to } => {
-            llr_Expression::Cast { from: Box::new(lower_expression(from, ctx)), to: to.clone() }
-        }
+        tree_Expression::Cast { from, to } => llr_Expression::Cast {
+            from: Box::new(lower_expression(&*from.borrow(), ctx)),
+            to: to.clone(),
+        },
         tree_Expression::CodeBlock(expr) => {
             llr_Expression::CodeBlock(expr.iter().map(|e| lower_expression(e, ctx)).collect::<_>())
         }

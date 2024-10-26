@@ -344,7 +344,10 @@ impl Expression {
                     SyntaxKind::ColorLiteral => Some(
                         crate::literals::parse_color_literal(token.text())
                             .map(|i| Expression::Cast {
-                                from: Box::new(Expression::NumberLiteral(i as _, Unit::None)),
+                                from: Rc::new(RefCell::new(Expression::NumberLiteral(
+                                    i as _,
+                                    Unit::None,
+                                ))),
                                 to: Type::Color,
                             })
                             .unwrap_or_else(|| {

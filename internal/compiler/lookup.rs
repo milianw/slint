@@ -566,7 +566,7 @@ impl LookupObject for ColorSpecific {
 impl ColorSpecific {
     fn as_result(value: u32) -> LookupResult {
         Expression::Cast {
-            from: Box::new(Expression::NumberLiteral(value as f64, Unit::None)),
+            from: Rc::new(RefCell::new(Expression::NumberLiteral(value as f64, Unit::None))),
             to: Type::Color,
         }
         .into()
@@ -979,7 +979,7 @@ impl<'a> LookupObject for ColorExpression<'a> {
     ) -> Option<R> {
         let member_function = |f: BuiltinFunction| {
             let base = if f == BuiltinFunction::ColorHsvaStruct && self.0.ty() == Type::Brush {
-                Expression::Cast { from: Box::new(self.0.clone()), to: Type::Color }
+                Expression::Cast { from: Rc::new(RefCell::new(self.0.clone())), to: Type::Color }
             } else {
                 self.0.clone()
             };
@@ -994,7 +994,7 @@ impl<'a> LookupObject for ColorExpression<'a> {
         };
         let field_access = |f: &'static str| {
             let base = if self.0.ty() == Type::Brush {
-                Expression::Cast { from: Box::new(self.0.clone()), to: Type::Color }
+                Expression::Cast { from: Rc::new(RefCell::new(self.0.clone())), to: Type::Color }
             } else {
                 self.0.clone()
             };

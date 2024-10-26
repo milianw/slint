@@ -10,6 +10,7 @@ use crate::expression_tree::{Expression, NamedReference};
 use crate::langtype::Type;
 use crate::object_tree::Component;
 use smol_str::SmolStr;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Ideally we would be able to write this in builtin.slint, but the StyleMetrics is not available there
@@ -41,42 +42,46 @@ pub fn apply_default_properties_from_style(
                     });
                     elem.set_binding_if_not_set("selection-background-color".into(), || {
                         Expression::Cast {
-                            from: Expression::PropertyReference(NamedReference::new(
-                                &palette.root_element,
-                                SmolStr::new_static("selection-background"),
-                            ))
-                            .into(),
+                            from: Rc::new(RefCell::new(Expression::PropertyReference(
+                                NamedReference::new(
+                                    &palette.root_element,
+                                    SmolStr::new_static("selection-background"),
+                                ),
+                            ))),
                             to: Type::Color,
                         }
                     });
                     elem.set_binding_if_not_set("selection-foreground-color".into(), || {
                         Expression::Cast {
-                            from: Expression::PropertyReference(NamedReference::new(
-                                &palette.root_element,
-                                SmolStr::new_static("selection-foreground"),
-                            ))
-                            .into(),
+                            from: Rc::new(RefCell::new(Expression::PropertyReference(
+                                NamedReference::new(
+                                    &palette.root_element,
+                                    SmolStr::new_static("selection-foreground"),
+                                ),
+                            ))),
                             to: Type::Color,
                         }
                     });
                 }
                 "Text" => {
                     elem.set_binding_if_not_set("color".into(), || Expression::Cast {
-                        from: Expression::PropertyReference(NamedReference::new(
-                            &palette.root_element,
-                            SmolStr::new_static("foreground"),
-                        ))
-                        .into(),
+                        from: Rc::new(RefCell::new(Expression::PropertyReference(
+                            NamedReference::new(
+                                &palette.root_element,
+                                SmolStr::new_static("foreground"),
+                            ),
+                        ))),
                         to: Type::Brush,
                     });
                 }
                 "Dialog" | "Window" => {
                     elem.set_binding_if_not_set("background".into(), || Expression::Cast {
-                        from: Expression::PropertyReference(NamedReference::new(
-                            &palette.root_element,
-                            SmolStr::new_static("background"),
-                        ))
-                        .into(),
+                        from: Rc::new(RefCell::new(Expression::PropertyReference(
+                            NamedReference::new(
+                                &palette.root_element,
+                                SmolStr::new_static("background"),
+                            ),
+                        ))),
                         to: Type::Brush,
                     });
 
@@ -91,11 +96,12 @@ pub fn apply_default_properties_from_style(
                         ) {
                             elem.set_binding_if_not_set(property_name.into(), || {
                                 Expression::Cast {
-                                    from: Expression::PropertyReference(NamedReference::new(
-                                        &style_metrics.root_element,
-                                        SmolStr::new_static(property_name),
-                                    ))
-                                    .into(),
+                                    from: Rc::new(RefCell::new(Expression::PropertyReference(
+                                        NamedReference::new(
+                                            &style_metrics.root_element,
+                                            SmolStr::new_static(property_name),
+                                        ),
+                                    ))),
                                     to: property_type,
                                 }
                             });

@@ -138,11 +138,10 @@ pub fn ensure_window(
 
     component.root_element.borrow_mut().set_binding_if_not_set("background".into(), || {
         Expression::Cast {
-            from: Expression::PropertyReference(NamedReference::new(
+            from: Rc::new(RefCell::new(Expression::PropertyReference(NamedReference::new(
                 &style_metrics.root_element,
                 SmolStr::new_static("window-background"),
-            ))
-            .into(),
+            )))),
             to: Type::Brush,
         }
     });

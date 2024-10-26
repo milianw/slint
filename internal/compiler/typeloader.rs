@@ -719,9 +719,10 @@ impl Snapshotter {
                 array: Box::new(self.snapshot_expression(array)),
                 index: Box::new(self.snapshot_expression(index)),
             },
-            Expression::Cast { from, to } => {
-                Expression::Cast { from: Box::new(self.snapshot_expression(from)), to: to.clone() }
-            }
+            Expression::Cast { from, to } => Expression::Cast {
+                from: Rc::new(RefCell::new(self.snapshot_expression(&*from.borrow()))),
+                to: to.clone(),
+            },
             Expression::CodeBlock(exprs) => {
                 Expression::CodeBlock(exprs.iter().map(|e| self.snapshot_expression(e)).collect())
             }

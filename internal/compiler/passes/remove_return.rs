@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
 
 use smol_str::{format_smolstr, SmolStr};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
@@ -75,9 +76,8 @@ fn process_expression(e: Expression, ctx: &RemoveReturnContext) -> ExpressionRes
                 }
             }
         }
-        Expression::Cast { from, to } => {
-            process_expression(*from, ctx).map_value(|e| Expression::Cast { from: e.into(), to })
-        }
+        Expression::Cast { from, to } => process_expression((*from.borrow()).clone(), ctx)
+            .map_value(|e| Expression::Cast { from: Rc::new(RefCell::new(e)), to }),
         e => {
             // Normally there shouldn't be any 'return' statements in there since return are not allowed in arbitrary expressions
             ExpressionResult::Just(e)
