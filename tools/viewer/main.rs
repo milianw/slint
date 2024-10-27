@@ -17,6 +17,7 @@ use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 struct Error(Box<dyn std::error::Error>);
 impl std::fmt::Debug for Error {
@@ -119,9 +120,35 @@ fn main() -> Result<()> {
         )?;
     };
 
-    let fswatcher = if args.auto_reload { Some(start_fswatch_thread(args.clone())?) } else { None };
-    let compiler = init_compiler(&args, fswatcher);
-    let r = spin_on::spin_on(compiler.build_from_path(&args.path));
+    // parse in a background thread
+
+    let r = {
+        let args = args.clone();
+        thread::spawn(move || {
+            let fswatcher = if args.auto_reload {
+                Some(start_fswatch_thread(args.clone()).unwrap())
+            } else {
+                None
+            };
+            let compiler = init_compiler(&args, fswatcher);
+            spin_on::spin_on(compiler.build_from_path(&args.path))
+        })
+    };
+
+    // while parsing is running, init some common code that the UI will need later on
+
+    // initialize the backend
+    i_slint_backend_selector::with_platform(|_b| {
+        // Nothing to do, just make sure a backend was created
+        Ok(())
+    })?;
+
+    i_slint_common::sharedfontdb::FONT_DB.with(|_| {
+        // Nothing to do, just make sure a backend was created
+    });
+
+    let r = r.join().unwrap();
+
     r.print_diagnostics();
     if r.has_errors() {
         std::process::exit(-1);

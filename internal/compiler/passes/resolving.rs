@@ -18,7 +18,7 @@ use crate::typeregister::TypeRegister;
 use core::num::IntErrorKind;
 use smol_str::SmolStr;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// This represents a scope for the Component, where Component is the repeated component, but
 /// does not represent a component in the .slint file
@@ -1337,7 +1337,7 @@ fn continue_lookup_within_element(
     let second = if let Some(second) = it.next() {
         second
     } else if matches!(ctx.property_type, Type::ElementReference) {
-        return Expression::ElementReference(Rc::downgrade(elem));
+        return Expression::ElementReference(Arc::downgrade(elem));
     } else {
         // Try to recover in case we wanted to access a property
         let mut rest = String::new();
@@ -1350,15 +1350,15 @@ fn continue_lookup_within_element(
             let e_borrowed = e.borrow();
             let mut id = e_borrowed.id.as_str();
             if id.is_empty() {
-                if ctx.component_scope.last().map_or(false, |x| Rc::ptr_eq(&e, x)) {
+                if ctx.component_scope.last().map_or(false, |x| Arc::ptr_eq(&e, x)) {
                     id = "self";
-                } else if ctx.component_scope.first().map_or(false, |x| Rc::ptr_eq(&e, x)) {
+                } else if ctx.component_scope.first().map_or(false, |x| Arc::ptr_eq(&e, x)) {
                     id = "root";
                 } else if ctx
                     .component_scope
                     .iter()
                     .nth_back(1)
-                    .map_or(false, |x| Rc::ptr_eq(&e, x))
+                    .map_or(false, |x| Arc::ptr_eq(&e, x))
                 {
                     id = "parent";
                 }
@@ -1421,7 +1421,7 @@ fn continue_lookup_within_element(
         } else if lookup_result.property_visibility == PropertyVisibility::Protected
             && !local_to_component
             && !(lookup_result.is_in_direct_base
-                && ctx.component_scope.first().map_or(false, |x| Rc::ptr_eq(x, elem)))
+                && ctx.component_scope.first().map_or(false, |x| Arc::ptr_eq(x, elem)))
         {
             ctx.diag.push_error(format!("The function '{}' is protected", second.text()), &second);
         }
@@ -1433,7 +1433,7 @@ fn continue_lookup_within_element(
         {
             // builtin member function
             Expression::MemberFunction {
-                base: Box::new(Expression::ElementReference(Rc::downgrade(elem))),
+                base: Box::new(Expression::ElementReference(Arc::downgrade(elem))),
                 base_node: Some(NodeOrToken::Node(node.into())),
                 member: Expression::BuiltinFunctionReference(f, Some(second.to_source_location()))
                     .into(),

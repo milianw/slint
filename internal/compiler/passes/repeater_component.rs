@@ -9,25 +9,25 @@ use crate::expression_tree::{Expression, NamedReference};
 use crate::langtype::ElementType;
 use crate::object_tree::*;
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
-pub fn process_repeater_components(component: &Rc<Component>) {
+pub fn process_repeater_components(component: &Arc<Component>) {
     create_repeater_components(component);
     adjust_references(component);
 }
 
-fn create_repeater_components(component: &Rc<Component>) {
+fn create_repeater_components(component: &Arc<Component>) {
     recurse_elem(&component.root_element, &(), &mut |elem, _| {
         let is_listview = match &elem.borrow().repeated {
             Some(r) => r.is_listview.clone(),
             None => return,
         };
-        let parent_element = Rc::downgrade(elem);
+        let parent_element = Arc::downgrade(elem);
         let mut elem = elem.borrow_mut();
 
         if matches!(&elem.base_type, ElementType::Component(c) if c.parent_element.upgrade().is_some())
         {
-            debug_assert!(std::rc::Weak::ptr_eq(
+            debug_assert!(std::sync::Weak::ptr_eq(
                 &parent_element,
                 &elem.base_type.as_component().parent_element
             ));
@@ -35,8 +35,8 @@ fn create_repeater_components(component: &Rc<Component>) {
             return;
         }
 
-        let comp = Rc::new(Component {
-            root_element: Rc::new(RefCell::new(Element {
+        let comp = Arc::new(Component {
+            root_element: Arc::new(RefCell::new(Element {
                 id: elem.id.clone(),
                 base_type: std::mem::take(&mut elem.base_type),
                 bindings: std::mem::take(&mut elem.bindings),
@@ -88,7 +88,7 @@ fn create_repeater_components(component: &Rc<Component>) {
             NamedReference::new(&comp.root_element, "y").mark_as_set();
         }
 
-        let weak = Rc::downgrade(&comp);
+        let weak = Arc::downgrade(&comp);
         recurse_elem(&comp.root_element, &(), &mut |e, _| {
             e.borrow_mut().enclosing_component = weak.clone()
         });
@@ -103,7 +103,7 @@ fn create_repeater_components(component: &Rc<Component>) {
 
 /// Make sure that references to property within the repeated element actually point to the reference
 /// to the root of the newly created component
-fn adjust_references(comp: &Rc<Component>) {
+fn adjust_references(comp: &Arc<Component>) {
     visit_all_named_references(comp, &mut |nr| {
         if nr.name() == "$model" {
             return;
@@ -124,7 +124,7 @@ fn adjust_references(comp: &Rc<Component>) {
                 {
                     let inner_element =
                         repeater_element.borrow().base_type.as_component().root_element.clone();
-                    *element_ref = Rc::downgrade(&inner_element);
+                    *element_ref = Arc::downgrade(&inner_element);
                 }
             }
         })

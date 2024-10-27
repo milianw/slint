@@ -42,6 +42,7 @@ use once_cell::unsync::{Lazy, OnceCell};
 use smol_str::{SmolStr, ToSmolStr};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::{pin::Pin, rc::Rc};
 
 pub const SPECIAL_PROPERTY_INDEX: &str = "$index";
@@ -49,7 +50,7 @@ pub const SPECIAL_PROPERTY_MODEL_DATA: &str = "$model_data";
 
 pub struct ItemTreeBox<'id> {
     instance: InstanceBox<'id>,
-    description: Rc<ItemTreeDescription<'id>>,
+    description: Arc<ItemTreeDescription<'id>>,
 }
 
 impl<'id> ItemTreeBox<'id> {
@@ -59,7 +60,7 @@ impl<'id> ItemTreeBox<'id> {
     }
 
     /// Safety: the lifetime is not unique
-    pub fn description(&self) -> Rc<ItemTreeDescription<'id>> {
+    pub fn description(&self) -> Arc<ItemTreeDescription<'id>> {
         self.description.clone()
     }
 
@@ -110,7 +111,7 @@ pub(crate) struct PropertiesWithinComponent {
 
 pub(crate) struct RepeaterWithinItemTree<'par_id, 'sub_id> {
     /// The description of the items to repeat
-    pub(crate) item_tree_to_repeat: Rc<ItemTreeDescription<'sub_id>>,
+    pub(crate) item_tree_to_repeat: Arc<ItemTreeDescription<'sub_id>>,
     /// The model
     pub(crate) model: Expression,
     /// Offset of the `Repeater`
@@ -346,26 +347,26 @@ impl<'id> ErasedRepeaterWithinComponent<'id> {
 type Callback = i_slint_core::Callback<[Value], Value>;
 
 #[derive(Clone)]
-pub struct ErasedItemTreeDescription(Rc<ItemTreeDescription<'static>>);
+pub struct ErasedItemTreeDescription(Arc<ItemTreeDescription<'static>>);
 impl ErasedItemTreeDescription {
     pub fn unerase<'a, 'id>(
         &'a self,
         _guard: generativity::Guard<'id>,
-    ) -> &'a Rc<ItemTreeDescription<'id>> {
+    ) -> &'a Arc<ItemTreeDescription<'id>> {
         // Safety: we just go from 'static to an unique lifetime
         unsafe {
             core::mem::transmute::<
-                &'a Rc<ItemTreeDescription<'static>>,
-                &'a Rc<ItemTreeDescription<'id>>,
+                &'a Arc<ItemTreeDescription<'static>>,
+                &'a Arc<ItemTreeDescription<'id>>,
             >(&self.0)
         }
     }
 }
-impl<'id> From<Rc<ItemTreeDescription<'id>>> for ErasedItemTreeDescription {
-    fn from(from: Rc<ItemTreeDescription<'id>>) -> Self {
+impl<'id> From<Arc<ItemTreeDescription<'id>>> for ErasedItemTreeDescription {
+    fn from(from: Arc<ItemTreeDescription<'id>>) -> Self {
         // Safety: We never access the ItemTreeDescription with the static lifetime, only after we unerase it
         Self(unsafe {
-            core::mem::transmute::<Rc<ItemTreeDescription<'id>>, Rc<ItemTreeDescription<'static>>>(
+            core::mem::transmute::<Arc<ItemTreeDescription<'id>>, Arc<ItemTreeDescription<'static>>>(
                 from,
             )
         })
@@ -382,7 +383,7 @@ impl<'id> From<Rc<ItemTreeDescription<'id>>> for ErasedItemTreeDescription {
 pub struct ItemTreeDescription<'id> {
     pub(crate) ct: ItemTreeVTable,
     /// INVARIANT: both dynamic_type and item_tree have the same lifetime id. Here it is erased to 'static
-    dynamic_type: Rc<dynamic_type::TypeInfo<'id>>,
+    dynamic_type: Arc<dynamic_type::TypeInfo<'id>>,
     item_tree: Vec<ItemTreeNode>,
     item_array:
         Vec<vtable::VOffset<crate::dynamic_type::Instance<'id>, ItemVTable, vtable::AllowPin>>,
@@ -401,7 +402,7 @@ pub struct ItemTreeDescription<'id> {
     /// Offset of a ComponentExtraData
     pub(crate) extra_data_offset: FieldOffset<Instance<'id>, ComponentExtraData>,
     /// Keep the Rc alive
-    pub(crate) original: Rc<object_tree::Component>,
+    pub(crate) original: Arc<object_tree::Component>,
     /// Maps from an item_id to the original element it came from
     pub(crate) original_elements: Vec<ElementRc>,
     /// Copy of original.root_element.property_declarations, without a guarded refcell
@@ -413,18 +414,17 @@ pub struct ItemTreeDescription<'id> {
     timers: Vec<FieldOffset<Instance<'id>, Timer>>,
 
     /// The collection of compiled globals
-    compiled_globals: Option<Rc<CompiledGlobalCollection>>,
+    compiled_globals: Option<Arc<CompiledGlobalCollection>>,
 
     /// The type loader, which will be available only on the top-most `ItemTreeDescription`.
     /// All other `ItemTreeDescription`s have `None` here.
     #[cfg(feature = "highlight")]
-    pub(crate) type_loader:
-        std::cell::OnceCell<std::rc::Rc<i_slint_compiler::typeloader::TypeLoader>>,
+    pub(crate) type_loader: std::cell::OnceCell<Arc<i_slint_compiler::typeloader::TypeLoader>>,
     /// The type loader, which will be available only on the top-most `ItemTreeDescription`.
     /// All other `ItemTreeDescription`s have `None` here.
     #[cfg(feature = "highlight")]
     pub(crate) raw_type_loader:
-        std::cell::OnceCell<Option<std::rc::Rc<i_slint_compiler::typeloader::TypeLoader>>>,
+        std::cell::OnceCell<Option<Arc<i_slint_compiler::typeloader::TypeLoader>>>,
 }
 
 fn internal_properties_to_public<'a>(
@@ -496,7 +496,7 @@ impl<'id> ItemTreeDescription<'id> {
 
     /// Instantiate a runtime ItemTree from this ItemTreeDescription
     pub fn create(
-        self: Rc<Self>,
+        self: Arc<Self>,
         options: WindowOptions,
     ) -> Result<DynamicComponentVRc, PlatformError> {
         i_slint_backend_selector::with_platform(|_b| {
@@ -870,7 +870,7 @@ pub async fn load(
         return CompilationResult {
             components: HashMap::new(),
             diagnostics: diag.into_iter().collect(),
-            #[cfg(feature = "internal")]
+            #[cfg(all(feature = "internal", not(feature = "internal-minimal")))]
             structs_and_enums: Vec::new(),
             #[cfg(feature = "internal")]
             named_exports: Vec::new(),
@@ -884,7 +884,7 @@ pub async fn load(
 
     let doc = loader.get_document(&path).unwrap();
 
-    let compiled_globals = Rc::new(CompiledGlobalCollection::compile(doc));
+    let compiled_globals = Arc::new(CompiledGlobalCollection::compile(doc));
     let mut components = HashMap::new();
 
     for c in doc.exported_roots() {
@@ -903,7 +903,7 @@ pub async fn load(
         diag.push_error_with_span("No component found".into(), Default::default());
     };
 
-    #[cfg(feature = "internal")]
+    #[cfg(all(feature = "internal", not(feature = "internal-minimal")))]
     let structs_and_enums = doc.used_types.borrow().structs_and_enums.clone();
 
     #[cfg(feature = "internal")]
@@ -930,7 +930,7 @@ pub async fn load(
     CompilationResult {
         diagnostics: diag.into_iter().collect(),
         components,
-        #[cfg(feature = "internal")]
+        #[cfg(all(feature = "internal", not(feature = "internal-minimal")))]
         structs_and_enums,
         #[cfg(feature = "internal")]
         named_exports,
@@ -991,10 +991,10 @@ fn generate_rtti() -> HashMap<&'static str, Rc<ItemRTTI>> {
 }
 
 pub(crate) fn generate_item_tree<'id>(
-    component: &Rc<object_tree::Component>,
-    compiled_globals: Option<Rc<CompiledGlobalCollection>>,
+    component: &Arc<object_tree::Component>,
+    compiled_globals: Option<Arc<CompiledGlobalCollection>>,
     guard: generativity::Guard<'id>,
-) -> Rc<ItemTreeDescription<'id>> {
+) -> Arc<ItemTreeDescription<'id>> {
     //dbg!(&*component.root_element.borrow());
 
     thread_local! {
@@ -1345,7 +1345,7 @@ pub(crate) fn generate_item_tree<'id>(
         raw_type_loader: std::cell::OnceCell::new(),
     };
 
-    Rc::new(t)
+    Arc::new(t)
 }
 
 pub fn animation_for_property(
@@ -1438,7 +1438,7 @@ fn make_binding_eval_closure(
 }
 
 pub fn instantiate(
-    description: Rc<ItemTreeDescription>,
+    description: Arc<ItemTreeDescription>,
     parent_ctx: Option<ErasedItemTreeBoxWeak>,
     root: Option<ErasedItemTreeBoxWeak>,
     window_options: Option<&WindowOptions>,
@@ -1793,7 +1793,7 @@ pub fn get_repeater_by_name<'a, 'id>(
     instance_ref: InstanceRef<'a, '_>,
     name: &str,
     guard: generativity::Guard<'id>,
-) -> (std::pin::Pin<&'a Repeater<ErasedItemTreeBox>>, Rc<ItemTreeDescription<'id>>) {
+) -> (std::pin::Pin<&'a Repeater<ErasedItemTreeBox>>, Arc<ItemTreeDescription<'id>>) {
     let rep_index = instance_ref.description.repeater_names[name];
     let rep_in_comp = instance_ref.description.repeater[rep_index].unerase(guard);
     (rep_in_comp.offset.apply_pin(instance_ref.instance), rep_in_comp.item_tree_to_repeat.clone())

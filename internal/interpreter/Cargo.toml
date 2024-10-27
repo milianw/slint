@@ -117,6 +117,9 @@ raw-window-handle-06 = ["dep:raw-window-handle-06", "i-slint-backend-selector/ra
 ## any stability guarantees whatsoever.
 internal = []
 
+## WIP
+internal-minimal = []
+
 [dependencies]
 i-slint-compiler = { workspace = true  }
 i-slint-common = { workspace = true }

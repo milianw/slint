@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[doc(inline)]
 pub use i_slint_compiler::diagnostics::{Diagnostic, DiagnosticLevel};
@@ -770,7 +771,7 @@ impl Compiler {
                 return CompilationResult {
                     components: HashMap::new(),
                     diagnostics: diagnostics.into_iter().collect(),
-                    #[cfg(feature = "internal")]
+                    #[cfg(all(feature = "internal", not(feature = "internal-minimal")))]
                     structs_and_enums: Vec::new(),
                     #[cfg(feature = "internal")]
                     named_exports: Vec::new(),
@@ -808,7 +809,7 @@ impl Compiler {
 pub struct CompilationResult {
     pub(crate) components: HashMap<String, ComponentDefinition>,
     pub(crate) diagnostics: Vec<Diagnostic>,
-    #[cfg(feature = "internal")]
+    #[cfg(all(feature = "internal", not(feature = "internal-minimal")))]
     pub(crate) structs_and_enums: Vec<LangType>,
     /// For `export { Foo as Bar }` this vec contains tuples of (`Foo`, `Bar`)
     #[cfg(feature = "internal")]
@@ -866,7 +867,7 @@ impl CompilationResult {
 
     /// This is an internal function without API stability guarantees.
     #[doc(hidden)]
-    #[cfg(feature = "internal")]
+    #[cfg(all(feature = "internal", not(feature = "internal-minimal")))]
     pub fn structs_and_enums(
         &self,
         _: i_slint_core::InternalToken,
@@ -1099,7 +1100,7 @@ impl ComponentDefinition {
     /// This gives access to the tree of Elements.
     #[cfg(feature = "internal")]
     #[doc(hidden)]
-    pub fn root_component(&self) -> Rc<i_slint_compiler::object_tree::Component> {
+    pub fn root_component(&self) -> Arc<i_slint_compiler::object_tree::Component> {
         let guard = unsafe { generativity::Guard::new(generativity::Id::new()) };
         self.inner.unerase(guard).original.clone()
     }
@@ -1108,7 +1109,7 @@ impl ComponentDefinition {
     ///
     /// WARNING: this is not part of the public API
     #[cfg(feature = "highlight")]
-    pub fn type_loader(&self) -> std::rc::Rc<i_slint_compiler::typeloader::TypeLoader> {
+    pub fn type_loader(&self) -> Arc<i_slint_compiler::typeloader::TypeLoader> {
         let guard = unsafe { generativity::Guard::new(generativity::Id::new()) };
         self.inner.unerase(guard).type_loader.get().unwrap().clone()
     }

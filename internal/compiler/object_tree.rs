@@ -26,7 +26,8 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
+use std::sync::{Arc, Weak};
 
 macro_rules! unwrap_or_continue {
     ($e:expr ; $diag:expr) => {
@@ -44,7 +45,7 @@ macro_rules! unwrap_or_continue {
 #[derive(Default, Debug)]
 pub struct Document {
     pub node: Option<syntax_nodes::Document>,
-    pub inner_components: Vec<Rc<Component>>,
+    pub inner_components: Vec<Arc<Component>>,
     pub inner_types: Vec<Type>,
     pub local_registry: TypeRegister,
     /// A list of paths to .ttf/.ttc files that are supposed to be registered on
@@ -207,7 +208,7 @@ impl Document {
                 .components_or_types
                 .iter()
                 .filter_map(|(_, exported_compo_or_type)| exported_compo_or_type.as_ref().left())
-                .any(|exported_compo| Rc::ptr_eq(exported_compo, local_compo))
+                .any(|exported_compo| Arc::ptr_eq(exported_compo, local_compo))
             {
                 continue;
             }
@@ -238,12 +239,12 @@ impl Document {
         }
     }
 
-    pub fn exported_roots(&self) -> impl DoubleEndedIterator<Item = Rc<Component>> + '_ {
+    pub fn exported_roots(&self) -> impl DoubleEndedIterator<Item = Arc<Component>> + '_ {
         self.exports.iter().filter_map(|e| e.1.as_ref().left()).filter(|c| !c.is_global()).cloned()
     }
 
     /// This is the component that is going to be instantiated by the interpreter
-    pub fn last_exported_component(&self) -> Option<Rc<Component>> {
+    pub fn last_exported_component(&self) -> Option<Arc<Component>> {
         self.exports
             .iter()
             .filter_map(|e| Some((&e.0.name_ident, e.1.as_ref().left()?)))
@@ -253,7 +254,7 @@ impl Document {
     }
 
     /// visit all root and used component (including globals)
-    pub fn visit_all_used_components(&self, mut v: impl FnMut(&Rc<Component>)) {
+    pub fn visit_all_used_components(&self, mut v: impl FnMut(&Arc<Component>)) {
         let used_types = self.used_types.borrow();
         for c in &used_types.sub_components {
             v(c);
@@ -269,7 +270,7 @@ impl Document {
 
 #[derive(Debug, Clone)]
 pub struct PopupWindow {
-    pub component: Rc<Component>,
+    pub component: Arc<Component>,
     pub x: NamedReference,
     pub y: NamedReference,
     pub close_policy: EnumerationValue,
@@ -289,12 +290,12 @@ type ChildrenInsertionPoint = (ElementRc, usize, syntax_nodes::ChildrenPlacehold
 #[derive(Debug, Default)]
 pub struct UsedSubTypes {
     /// All the globals used by the component and its children.
-    pub globals: Vec<Rc<Component>>,
+    pub globals: Vec<Arc<Component>>,
     /// All the structs and enums used by the component and its children.
     pub structs_and_enums: Vec<Type>,
     /// All the sub components use by this components and its children,
     /// and the amount of time it is used
-    pub sub_components: Vec<Rc<Component>>,
+    pub sub_components: Vec<Arc<Component>>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -372,7 +373,7 @@ impl Component {
         node: syntax_nodes::Component,
         diag: &mut BuildDiagnostics,
         tr: &TypeRegister,
-    ) -> Rc<Self> {
+    ) -> Arc<Self> {
         let mut child_insertion_point = None;
         let is_legacy_syntax = node.child_token(SyntaxKind::ColonEqual).is_some();
         let c = Component {
@@ -394,8 +395,8 @@ impl Component {
             child_insertion_point: RefCell::new(child_insertion_point),
             ..Default::default()
         };
-        let c = Rc::new(c);
-        let weak = Rc::downgrade(&c);
+        let c = Arc::new(c);
+        let weak = Arc::downgrade(&c);
         recurse_elem(&c.root_element, &(), &mut |e, _| {
             e.borrow_mut().enclosing_component = weak.clone();
             if let Some(qualified_id) =
@@ -543,7 +544,7 @@ impl Clone for PropertyAnimation {
             debug_assert!(e.children.is_empty());
             debug_assert!(e.property_declarations.is_empty());
             debug_assert!(e.states.is_empty() && e.transitions.is_empty());
-            Rc::new(RefCell::new(Element {
+            Arc::new(RefCell::new(Element {
                 id: e.id.clone(),
                 base_type: e.base_type.clone(),
                 bindings: e.bindings.clone(),
@@ -875,7 +876,7 @@ pub struct RepeatedElementInfo {
     pub is_listview: Option<ListViewInfo>,
 }
 
-pub type ElementRc = Rc<RefCell<Element>>;
+pub type ElementRc = Arc<RefCell<Element>>;
 pub type ElementWeak = Weak<RefCell<Element>>;
 
 impl Element {
@@ -1722,7 +1723,7 @@ impl Element {
         }
     }
 
-    pub fn native_class(&self) -> Option<Rc<NativeClass>> {
+    pub fn native_class(&self) -> Option<Arc<NativeClass>> {
         let mut base_type = self.base_type.clone();
         loop {
             match &base_type {
@@ -1736,7 +1737,7 @@ impl Element {
         }
     }
 
-    pub fn builtin_type(&self) -> Option<Rc<BuiltinElement>> {
+    pub fn builtin_type(&self) -> Option<Arc<BuiltinElement>> {
         let mut base_type = self.base_type.clone();
         loop {
             match &base_type {
@@ -1809,7 +1810,7 @@ impl Element {
         true
     }
 
-    pub fn sub_component(&self) -> Option<&Rc<Component>> {
+    pub fn sub_component(&self) -> Option<&Arc<Component>> {
         if self.repeated.is_some() || self.is_component_placeholder {
             None
         } else if let ElementType::Component(sub_component) = &self.base_type {
@@ -1940,7 +1941,7 @@ fn animation_element_from_node(
 
         apply_default_type_properties(&mut anim_element);
 
-        Some(Rc::new(RefCell::new(anim_element)))
+        Some(Arc::new(RefCell::new(anim_element)))
     }
 }
 
@@ -2049,7 +2050,7 @@ fn find_element_by_id(e: &ElementRc, name: &str) -> Option<ElementRc> {
 pub fn find_parent_element(e: &ElementRc) -> Option<ElementRc> {
     fn recurse(base: &ElementRc, e: &ElementRc) -> Option<ElementRc> {
         for child in &base.borrow().children {
-            if Rc::ptr_eq(child, e) {
+            if Arc::ptr_eq(child, e) {
                 return Some(base.clone());
             }
             if let Some(x) = recurse(child, e) {
@@ -2060,7 +2061,7 @@ pub fn find_parent_element(e: &ElementRc) -> Option<ElementRc> {
     }
 
     let root = e.borrow().enclosing_component.upgrade().unwrap().root_element.clone();
-    if Rc::ptr_eq(&root, e) {
+    if Arc::ptr_eq(&root, e) {
         return None;
     }
     recurse(&root, e)
@@ -2218,7 +2219,7 @@ pub fn visit_element_expressions(
     elem.borrow_mut().transitions = transitions;
 
     let component = elem.borrow().enclosing_component.upgrade().unwrap();
-    if Rc::ptr_eq(&component.root_element, elem) {
+    if Arc::ptr_eq(&component.root_element, elem) {
         for e in component.init_code.borrow_mut().iter_mut() {
             vis(e, None, &|| Type::Void);
         }
@@ -2245,7 +2246,7 @@ pub fn visit_named_references_in_expression(
             let mut nc = NamedReference::new(&element.upgrade().unwrap(), "$model");
             vis(&mut nc);
             debug_assert!(nc.element().borrow().repeated.is_some());
-            *element = Rc::downgrade(&nc.element());
+            *element = Arc::downgrade(&nc.element());
         }
         _ => {}
     }
@@ -2447,13 +2448,13 @@ impl ExportedName {
 #[derive(Default, Debug, derive_more::Deref)]
 pub struct Exports {
     #[deref]
-    components_or_types: Vec<(ExportedName, Either<Rc<Component>, Type>)>,
+    components_or_types: Vec<(ExportedName, Either<Arc<Component>, Type>)>,
 }
 
 impl Exports {
     pub fn from_node(
         doc: &syntax_nodes::Document,
-        inner_components: &[Rc<Component>],
+        inner_components: &[Arc<Component>],
         type_registry: &TypeRegister,
         diag: &mut BuildDiagnostics,
     ) -> Self {
@@ -2482,7 +2483,7 @@ impl Exports {
         let mut sorted_exports_with_duplicates: Vec<(ExportedName, _)> = Vec::new();
 
         let mut extend_exports =
-            |it: &mut dyn Iterator<Item = (ExportedName, Either<Rc<Component>, Type>)>| {
+            |it: &mut dyn Iterator<Item = (ExportedName, Either<Arc<Component>, Type>)>| {
                 for (name, compo_or_type) in it {
                     let pos = sorted_exports_with_duplicates
                         .partition_point(|(existing_name, _)| existing_name.name <= name.name);
@@ -2602,7 +2603,7 @@ impl Exports {
 
     pub fn add_reexports(
         &mut self,
-        other_exports: impl IntoIterator<Item = (ExportedName, Either<Rc<Component>, Type>)>,
+        other_exports: impl IntoIterator<Item = (ExportedName, Either<Arc<Component>, Type>)>,
         diag: &mut BuildDiagnostics,
     ) {
         for export in other_exports {
@@ -2623,7 +2624,7 @@ impl Exports {
         }
     }
 
-    pub fn find(&self, name: &str) -> Option<Either<Rc<Component>, Type>> {
+    pub fn find(&self, name: &str) -> Option<Either<Arc<Component>, Type>> {
         self.components_or_types
             .binary_search_by(|(exported_name, _)| exported_name.as_str().cmp(name))
             .ok()
@@ -2632,7 +2633,7 @@ impl Exports {
 
     pub fn retain(
         &mut self,
-        func: impl FnMut(&mut (ExportedName, Either<Rc<Component>, Type>)) -> bool,
+        func: impl FnMut(&mut (ExportedName, Either<Arc<Component>, Type>)) -> bool,
     ) {
         self.components_or_types.retain_mut(func)
     }
@@ -2659,7 +2660,7 @@ impl Exports {
 }
 
 impl std::iter::IntoIterator for Exports {
-    type Item = (ExportedName, Either<Rc<Component>, Type>);
+    type Item = (ExportedName, Either<Arc<Component>, Type>);
 
     type IntoIter = std::vec::IntoIter<Self::Item>;
 

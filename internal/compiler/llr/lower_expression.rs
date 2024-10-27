@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroUsize;
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use itertools::Either;
 
@@ -23,7 +24,7 @@ use crate::{
 };
 
 pub struct ExpressionContext<'a> {
-    pub component: &'a Rc<crate::object_tree::Component>,
+    pub component: &'a Arc<crate::object_tree::Component>,
     pub mapping: &'a LoweredSubComponentMapping,
     pub state: &'a LoweringState,
     pub parent: Option<&'a ExpressionContext<'a>>,
@@ -36,7 +37,7 @@ impl ExpressionContext<'_> {
         if !enclosing.is_global() {
             let mut map = self;
             let mut level = 0;
-            while !Rc::ptr_eq(enclosing, map.component) {
+            while !Arc::ptr_eq(enclosing, map.component) {
                 map = map.parent.unwrap();
                 level += 1;
             }

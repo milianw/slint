@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use itertools::Itertools;
 
@@ -395,11 +396,11 @@ impl BuiltinPropertyInfo {
 #[derive(Clone, Debug)]
 pub enum ElementType {
     /// The element is based of a component
-    Component(Rc<Component>),
+    Component(Arc<Component>),
     /// The element is a builtin element
-    Builtin(Rc<BuiltinElement>),
+    Builtin(Arc<BuiltinElement>),
     /// The native type was resolved by the resolve_native_class pass.
-    Native(Rc<NativeClass>),
+    Native(Arc<NativeClass>),
     /// The base element couldn't be looked up
     Error,
     /// This should be the base type of the root element of a global component
@@ -409,9 +410,9 @@ pub enum ElementType {
 impl PartialEq for ElementType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Component(a), Self::Component(b)) => Rc::ptr_eq(a, b),
-            (Self::Builtin(a), Self::Builtin(b)) => Rc::ptr_eq(a, b),
-            (Self::Native(a), Self::Native(b)) => Rc::ptr_eq(a, b),
+            (Self::Component(a), Self::Component(b)) => Arc::ptr_eq(a, b),
+            (Self::Builtin(a), Self::Builtin(b)) => Arc::ptr_eq(a, b),
+            (Self::Native(a), Self::Native(b)) => Arc::ptr_eq(a, b),
             (Self::Error, Self::Error) | (Self::Global, Self::Global) => true,
             _ => false,
         }
@@ -639,7 +640,7 @@ impl ElementType {
     }
 
     /// Assume it is a Component, panic if it isn't
-    pub fn as_component(&self) -> &Rc<Component> {
+    pub fn as_component(&self) -> &Arc<Component> {
         match self {
             Self::Component(c) => c,
             _ => panic!("should be a component because of the repeater_component pass"),
@@ -748,7 +749,7 @@ pub enum DefaultSizeBinding {
 #[derive(Debug, Clone, Default)]
 pub struct BuiltinElement {
     pub name: SmolStr,
-    pub native_class: Rc<NativeClass>,
+    pub native_class: Arc<NativeClass>,
     pub properties: BTreeMap<SmolStr, BuiltinPropertyInfo>,
     pub reserved_properties: BTreeMap<SmolStr, BuiltinPropertyInfo>,
     pub additional_accepted_child_types: HashMap<SmolStr, ElementType>,
@@ -764,7 +765,7 @@ pub struct BuiltinElement {
 }
 
 impl BuiltinElement {
-    pub fn new(native_class: Rc<NativeClass>) -> Self {
+    pub fn new(native_class: Arc<NativeClass>) -> Self {
         Self { name: native_class.class_name.clone(), native_class, ..Default::default() }
     }
 }

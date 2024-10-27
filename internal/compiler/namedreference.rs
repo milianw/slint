@@ -9,14 +9,14 @@ use smol_str::SmolStr;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 
 use crate::langtype::{ElementType, Type};
 use crate::object_tree::{Element, ElementRc, PropertyAnalysis, PropertyVisibility};
 
 /// Reference to a property or callback of a given name within an element.
 #[derive(Clone)]
-pub struct NamedReference(Rc<NamedReferenceInner>);
+pub struct NamedReference(Arc<NamedReferenceInner>);
 
 pub fn pretty_print_element_ref(
     f: &mut dyn std::fmt::Write,
@@ -43,7 +43,7 @@ impl NamedReference {
         Self(NamedReferenceInner::from_name(element, name))
     }
     pub(crate) fn snapshot(&self, snapshotter: &mut crate::typeloader::Snapshotter) -> Self {
-        NamedReference(Rc::new(self.0.snapshot(snapshotter)))
+        NamedReference(Arc::new(self.0.snapshot(snapshotter)))
     }
     pub fn name(&self) -> &str {
         &self.0.name
@@ -141,13 +141,13 @@ impl Eq for NamedReference {}
 
 impl PartialEq for NamedReference {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
 impl Hash for NamedReference {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        Rc::as_ptr(&self.0).hash(state);
+        Arc::as_ptr(&self.0).hash(state);
     }
 }
 
@@ -162,19 +162,19 @@ impl NamedReferenceInner {
     fn check_invariant(&self) {
         debug_assert!(std::ptr::eq(
             self as *const Self,
-            Rc::as_ptr(
+            Arc::as_ptr(
                 &self.element.upgrade().unwrap().borrow().named_references.0.borrow()[&self.name]
             )
         ))
     }
 
-    pub fn from_name(element: &ElementRc, name: &str) -> Rc<Self> {
+    pub fn from_name(element: &ElementRc, name: &str) -> Arc<Self> {
         let elem = element.borrow();
         let mut named_references = elem.named_references.0.borrow_mut();
         let result = if let Some(r) = named_references.get(name) {
             r.clone()
         } else {
-            let r = Rc::new(Self { element: Rc::downgrade(element), name: name.into() });
+            let r = Arc::new(Self { element: Arc::downgrade(element), name: name.into() });
             named_references.insert(name.into(), r.clone());
             r
         };
@@ -185,9 +185,9 @@ impl NamedReferenceInner {
 
     pub(crate) fn snapshot(&self, snapshotter: &mut crate::typeloader::Snapshotter) -> Self {
         let element = if let Some(el) = self.element.upgrade() {
-            Rc::downgrade(&snapshotter.use_element(&el))
+            Arc::downgrade(&snapshotter.use_element(&el))
         } else {
-            std::rc::Weak::default()
+            std::sync::Weak::default()
         };
 
         Self { element, name: self.name.clone() }
@@ -196,14 +196,14 @@ impl NamedReferenceInner {
 
 /// Must be put inside the Element and owns all the NamedReferenceInner
 #[derive(Default)]
-pub struct NamedReferenceContainer(RefCell<HashMap<SmolStr, Rc<NamedReferenceInner>>>);
+pub struct NamedReferenceContainer(RefCell<HashMap<SmolStr, Arc<NamedReferenceInner>>>);
 
 impl NamedReferenceContainer {
     /// Returns true if there is at least one NamedReference pointing to the property `name` in this element.
     pub fn is_referenced(&self, name: &str) -> bool {
         if let Some(nri) = self.0.borrow().get(name) {
             // one reference for the hashmap itself
-            Rc::strong_count(nri) > 1
+            Arc::strong_count(nri) > 1
         } else {
             false
         }
@@ -217,7 +217,7 @@ impl NamedReferenceContainer {
             .0
             .borrow()
             .iter()
-            .map(|(k, v)| (k.clone(), Rc::new(v.snapshot(snapshotter))))
+            .map(|(k, v)| (k.clone(), Arc::new(v.snapshot(snapshotter))))
             .collect();
         NamedReferenceContainer(RefCell::new(inner))
     }

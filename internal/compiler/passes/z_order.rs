@@ -4,14 +4,14 @@
 /*! re-order the children by their z-order
 */
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::diagnostics::BuildDiagnostics;
 use crate::expression_tree::{Expression, Unit};
 use crate::langtype::ElementType;
 use crate::object_tree::{Component, ElementRc};
 
-pub fn reorder_by_z_order(root_component: &Rc<Component>, diag: &mut BuildDiagnostics) {
+pub fn reorder_by_z_order(root_component: &Arc<Component>, diag: &mut BuildDiagnostics) {
     crate::object_tree::recurse_elem_including_sub_components(
         root_component,
         &(),
@@ -22,7 +22,7 @@ pub fn reorder_by_z_order(root_component: &Rc<Component>, diag: &mut BuildDiagno
 }
 
 fn reorder_children_by_zorder(
-    elem: &Rc<std::cell::RefCell<crate::object_tree::Element>>,
+    elem: &Arc<std::cell::RefCell<crate::object_tree::Element>>,
     diag: &mut BuildDiagnostics,
 ) {
     // maps indexes to their z order

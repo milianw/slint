@@ -11,7 +11,7 @@ use core::cell::RefCell;
 use smol_str::SmolStr;
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Weak};
 
 // FIXME remove the pub
 pub use crate::namedreference::NamedReference;
@@ -1617,7 +1617,7 @@ pub enum Path {
 
 #[derive(Debug, Clone)]
 pub struct PathElement {
-    pub element_type: Rc<BuiltinElement>,
+    pub element_type: Arc<BuiltinElement>,
     pub bindings: BindingsMap,
 }
 

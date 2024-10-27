@@ -5,6 +5,7 @@ use core::pin::Pin;
 use smol_str::SmolStr;
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::api::Value;
 use crate::dynamic_item_tree::{ErasedItemTreeBox, ErasedItemTreeDescription};
@@ -65,7 +66,7 @@ pub enum CompiledGlobal {
         // dummy needed for iterator accessor
         public_properties: BTreeMap<SmolStr, PropertyDeclaration>,
         /// keep the Component alive as it is boing referenced by `NamedReference`s
-        _original: Rc<Component>,
+        _original: Arc<Component>,
     },
     Component {
         component: ErasedItemTreeDescription,
@@ -299,7 +300,7 @@ impl<T: rtti::BuiltinItem + 'static> GlobalComponent for T {
     }
 }
 
-fn generate(component: &Rc<Component>) -> CompiledGlobal {
+fn generate(component: &Arc<Component>) -> CompiledGlobal {
     debug_assert!(component.is_global());
     match &component.root_element.borrow().base_type {
         ElementType::Global => {

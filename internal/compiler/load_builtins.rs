@@ -8,7 +8,7 @@
 use smol_str::{SmolStr, ToSmolStr};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::expression_tree::{BuiltinFunction, Expression};
 use crate::langtype::{
@@ -35,7 +35,7 @@ pub(crate) fn load_builtins(register: &mut TypeRegister) {
     assert_eq!(node.kind(), crate::parser::SyntaxKind::Document);
     let doc: syntax_nodes::Document = node.into();
 
-    let mut natives = HashMap::<SmolStr, Rc<BuiltinElement>>::new();
+    let mut natives = HashMap::<SmolStr, Arc<BuiltinElement>>::new();
 
     let exports = doc
         .ExportsList()
@@ -141,7 +141,7 @@ pub(crate) fn load_builtins(register: &mut TypeRegister) {
         enum Base {
             None,
             Global,
-            NativeParent(Rc<BuiltinElement>),
+            NativeParent(Arc<BuiltinElement>),
         }
         let base = if c.child_text(SyntaxKind::Identifier).map_or(false, |t| t == "global") {
             Base::Global
@@ -167,7 +167,7 @@ pub(crate) fn load_builtins(register: &mut TypeRegister) {
                 .map(|(name, fun)| (name.clone(), BuiltinPropertyInfo::new(fun.ty()))),
         );
 
-        let mut builtin = BuiltinElement::new(Rc::new(n));
+        let mut builtin = BuiltinElement::new(Arc::new(n));
         builtin.is_global = matches!(base, Base::Global);
         let properties = &mut builtin.properties;
         if let Base::NativeParent(parent) = &base {
@@ -204,7 +204,7 @@ pub(crate) fn load_builtins(register: &mut TypeRegister) {
             } else {
                 let glob = Rc::new(Component {
                     id: builtin_name.clone(),
-                    root_element: Rc::new(RefCell::new(Element {
+                    root_element: Arc::new(RefCell::new(Element {
                         base_type: ElementType::Builtin(Rc::new(builtin)),
                         ..Default::default()
                     })),

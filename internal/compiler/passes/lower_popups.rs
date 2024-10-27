@@ -175,7 +175,7 @@ fn lower_popup_window(
 
     let popup_comp = Rc::new(Component {
         root_element: popup_window_element.clone(),
-        parent_element: Rc::downgrade(parent_element),
+        parent_element: Arc::downgrade(parent_element),
         ..Component::default()
     });
 

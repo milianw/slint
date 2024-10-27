@@ -6,7 +6,7 @@ use crate::langtype::ElementType;
 use crate::object_tree::*;
 use smol_str::{format_smolstr, SmolStr, ToSmolStr};
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// This pass make sure that the id of the elements are unique
 ///
@@ -23,7 +23,7 @@ pub fn assign_unique_id(doc: &Document) {
     rename_globals(doc, count);
 }
 
-fn assign_unique_id_in_component(component: &Rc<Component>, count: &mut u32) {
+fn assign_unique_id_in_component(component: &Arc<Component>, count: &mut u32) {
     recurse_elem_including_sub_components(component, &(), &mut |elem, _| {
         *count += 1;
         let mut elem_mut = elem.borrow_mut();
@@ -35,7 +35,7 @@ fn assign_unique_id_in_component(component: &Rc<Component>, count: &mut u32) {
         elem_mut.id = format_smolstr!("{}-{}", old_id, count);
 
         let enclosing = elem_mut.enclosing_component.upgrade().unwrap();
-        if Rc::ptr_eq(&elem, &enclosing.root_element) {
+        if Arc::ptr_eq(&elem, &enclosing.root_element) {
             for o in enclosing.optimized_elements.borrow().iter() {
                 *count += 1;
                 let mut elem_mut = o.borrow_mut();
@@ -68,7 +68,7 @@ pub fn check_unique_id(doc: &Document, diag: &mut BuildDiagnostics) {
     }
 }
 
-fn check_unique_id_in_component(component: &Rc<Component>, diag: &mut BuildDiagnostics) {
+fn check_unique_id_in_component(component: &Arc<Component>, diag: &mut BuildDiagnostics) {
     struct SeenId {
         element: ElementRc,
         error_reported: bool,
@@ -80,7 +80,7 @@ fn check_unique_id_in_component(component: &Rc<Component>, diag: &mut BuildDiagn
         let id = &elem_bor.id;
         if !id.is_empty() {
             if let Some(other_loc) = seen_ids.get_mut(id) {
-                debug_assert!(!Rc::ptr_eq(&other_loc.element, elem));
+                debug_assert!(!Arc::ptr_eq(&other_loc.element, elem));
                 let message = format!("duplicated element id '{}'", id);
                 if !other_loc.error_reported {
                     diag.push_error(message.clone(), &*other_loc.element.borrow());

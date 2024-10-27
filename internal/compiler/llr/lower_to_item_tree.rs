@@ -13,6 +13,7 @@ use crate::CompilerConfiguration;
 use smol_str::{format_smolstr, SmolStr};
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub fn lower_to_item_tree(
     document: &crate::object_tree::Document,
@@ -699,7 +700,7 @@ fn lower_timer(timer: &object_tree::Timer, ctx: &ExpressionContext) -> Timer {
 }
 
 fn lower_global(
-    global: &Rc<Component>,
+    global: &Arc<Component>,
     global_index: usize,
     state: &mut LoweringState,
 ) -> GlobalComponent {

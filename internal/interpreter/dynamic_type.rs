@@ -11,6 +11,7 @@ use core::alloc::Layout;
 use generativity::Id;
 use i_slint_core::rtti::FieldOffset;
 use std::rc::Rc;
+use std::sync::Arc;
 
 unsafe fn construct_fn<T: Default>(ptr: *mut u8) {
     core::ptr::write(ptr as *mut T, T::default());
@@ -112,9 +113,9 @@ impl<'id> TypeBuilder<'id> {
         len_rounded_up
     }
 
-    pub fn build(self) -> Rc<TypeInfo<'id>> {
+    pub fn build(self) -> Arc<TypeInfo<'id>> {
         let size = self.size.wrapping_add(self.align).wrapping_sub(1) & !self.align.wrapping_sub(1);
-        Rc::new(TypeInfo {
+        Arc::new(TypeInfo {
             mem_layout: core::alloc::Layout::from_size_align(size, self.align).unwrap(),
             fields: self.fields,
             id: self.id,
